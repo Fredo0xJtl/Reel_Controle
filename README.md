@@ -1,6 +1,9 @@
 # Focus Reels
 
-Application Android 100 % locale de blocage sélectif de l'onglet Reels d'Instagram.  
+Application Android 100 % locale de blocage sélectif de l'onglet Reels d'Instagram.
+
+**Compatible** : Xiaomi Redmi Note 17 Pro (MIUI/HyperOS), Samsung Galaxy S24 (OneUI), Android AOSP standard.
+
 Voir [.docs/Cahier_des_charges_Focus_Reels_V1.1.md](.docs/Cahier_des_charges_Focus_Reels_V1.1.md) pour les spécifications complètes.
 
 ## Stack technique
@@ -122,12 +125,14 @@ Puis dans l'app : **Configuration système** → activer accessibilité + désac
 5. **Jetpack Compose** vs XML classique  
    Moins de code (déclaratif), meilleure testabilité, et c'est l'avenir officiel d'Android.
 
-### À affiner avant usage réel
+### À valider avant usage réel
 
-- **Identifiants de vues Instagram** dans `InstagramUiDetector.kt` : heuristiques de départ.  
-  À valider/ajuster empiriquement sur Redmi Note 17 Pro + MIUI version cible (§4.3, §4.5).
-- **Tests d'intégration** : écrire des tests qui valident le blocage réel avec un émulateur ou appareil physique.
-- **Gestion des permissions** : implémenter une vérification/rappel si l'accessibilité est coupée par le système.
+- **Détection Instagram sur MIUI et OneUI** : 
+  - Redmi Note 17 Pro + MIUI/HyperOS version cible
+  - Samsung Galaxy S24 + OneUI
+  - Vérifier les logs (`adb logcat`) pour confirmer détection correcte
+- **Comportement batterie** : vérifier que le reverrouillage automatique fonctionne après redémarrage
+- **Logs disponibles** : lancés via `adb logcat -s "ReelsAccessibilityService|InstagramUiDetector"` pour diagnostic
 
 ## Structure des fichiers clés
 

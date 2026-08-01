@@ -2,6 +2,8 @@
 
 APK debug générée : `app/build/outputs/apk/debug/app-debug.apk` (25 MB)
 
+**Compatible** : Xiaomi Redmi Note 17 Pro (MIUI/HyperOS), Samsung Galaxy S24 (OneUI), Android standard
+
 ## Prérequis
 
 - **ADB** (Android Debug Bridge) sur ta machine  
@@ -50,11 +52,16 @@ Depuis le téléphone : ouvrir `Focus Reels` depuis le menu des apps.
 3. Activer le service.
 4. Accepter les permissions (pas d'accès réseau, juste accessibilité).
 
-### 4. Désactiver l'optimisation batterie (MIUI/HyperOS)
+### 4. Désactiver l'optimisation batterie
 
+#### Xiaomi (MIUI/HyperOS)
 Aller à Paramètres → Apps → Focus Reels → Optimisation batterie → Désactiver.
 
-**Pourquoi ?** Sur Xiaomi, le système tue les services background agressivement pour économiser la batterie. Sans cette étape, l'AccessibilityService peut se couper sans avertissement.
+#### Samsung (OneUI / Galaxy S24)
+Aller à Paramètres → Apps → Focus Reels → Batterie → Mode de batterie adaptative → Désactiver  
+(ou : Paramètres → Batterie → Gestion d'alimentation → Ajouter Focus Reels à la liste blanche)
+
+**Pourquoi ?** Les systèmes d'exploitation tuent agressivement les services background pour économiser la batterie. Sans cette étape, l'AccessibilityService peut se couper sans avertissement.
 
 ## Tester le blocage
 
@@ -86,10 +93,17 @@ Aller à Paramètres → Apps → Focus Reels → Optimisation batterie → Dés
 Pour voir les logs en temps réel :
 
 ```bash
-adb logcat -s "ReelsAccessibilityService"
+adb logcat -s "ReelsAccessibilityService|InstagramUiDetector"
 ```
 
-Cela affichera les événements du service d'accessibilité (détection Reels, blocages, etc.).
+Cela affichera les événements du service d'accessibilité (détection Reels, blocages, tentatives, etc.).
+
+**Lecture des logs** :
+- `Service d'accessibilité connecté` → service prêt
+- `Événement AccessibilityEvent reçu` → Instagram détecte un changement
+- `Reels général détecté` → le blocage a été appliqué
+- `Blocage Reels activé : redirection` → Reels bloqué avec succès
+- `Erreur lors de la détection` → problème de reconnaissance (Instagram a changé d'UI)
 
 ## Génération de release (futur)
 

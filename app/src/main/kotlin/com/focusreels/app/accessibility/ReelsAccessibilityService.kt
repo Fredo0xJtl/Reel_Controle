@@ -1,6 +1,7 @@
 package com.focusreels.app.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.focusreels.app.FocusReelsApplication
 import com.focusreels.app.data.repository.BlockedAppRepository
@@ -21,6 +22,10 @@ import kotlinx.coroutines.launch
  */
 class ReelsAccessibilityService : AccessibilityService() {
 
+    companion object {
+        private const val TAG = "ReelsAccessibilityService"
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var blockedAppRepository: BlockedAppRepository
     private lateinit var historyRepository: HistoryRepository
@@ -31,11 +36,14 @@ class ReelsAccessibilityService : AccessibilityService() {
         val app = application as FocusReelsApplication
         blockedAppRepository = BlockedAppRepository(app.database)
         historyRepository = HistoryRepository(app.database)
+        Log.i(TAG, "Service d'accessibilité connecté et prêt")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         if (event.packageName?.toString() != AppIds.INSTAGRAM) return
+
+        Log.v(TAG, "Événement AccessibilityEvent reçu : type=${event.eventType}, package=${event.packageName}")
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
@@ -77,9 +85,16 @@ class ReelsAccessibilityService : AccessibilityService() {
 
     private fun blockIfEnabled() {
         scope.launch {
-            val entity = blockedAppRepository.get(AppIds.INSTAGRAM) ?: return@launch
-            if (!entity.blockingEnabled) return@launch
+            val entity = blockedAppRepository.get(AppIds.INSTAGRAM) ?: run {
+                Log.w(TAG, "Configuration Instagram non trouvée, pas de blocage")
+                return@launch
+            }
+            if (!entity.blockingEnabled) {
+                Log.v(TAG, "Blocage désactivé actuellement, pas d'action")
+                return@launch
+            }
 
+            Log.i(TAG, "Blocage Reels activé : redirection vers l'écran précédent")
             historyRepository.recordAttempt(AppIds.INSTAGRAM)
             performGlobalAction(GLOBAL_ACTION_BACK)
             swipeTracker.reset()
