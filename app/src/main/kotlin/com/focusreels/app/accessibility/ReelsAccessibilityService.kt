@@ -66,6 +66,7 @@ class ReelsAccessibilityService : AccessibilityService() {
                 blockIfEnabled()
             }
         } finally {
+            @Suppress("DEPRECATION")
             root.recycle()
         }
     }

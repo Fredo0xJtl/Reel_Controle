@@ -70,7 +70,7 @@ fun UnlockFrictionScreen(
         onUnlocked(relockDelayMinutes)
     }
 
-    Scaffold { padding ->
+    Scaffold { _ ->
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
