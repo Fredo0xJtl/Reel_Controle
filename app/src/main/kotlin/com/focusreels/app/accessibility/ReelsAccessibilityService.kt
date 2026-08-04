@@ -13,6 +13,7 @@ import com.focusreels.app.util.AppIds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -39,6 +40,24 @@ class ReelsAccessibilityService : AccessibilityService() {
          * identifiants d'[InstagramUiDetector] après une mise à jour d'Instagram (§4.5).
          */
         private const val DIAGNOSTIC_DUMP = false
+
+        /**
+         * `AccessibilityEvent` est déclenché par un *changement* d'arbre UI, pas en continu :
+         * une vidéo Reels qui joue simplement ne génère plus aucun événement. Si notre clic sur
+         * l'onglet Accueil arrive juste au moment d'un vrai tap physique de l'utilisateur et que
+         * ce dernier « gagne la course » (Reels reste affiché), aucun nouvel événement n'arrivera
+         * jamais pour nous permettre de réessayer : le Reels resterait bloqué ouvert
+         * indéfiniment. On vérifie donc explicitement le résultat après un court délai, plutôt
+         * que de dépendre uniquement de l'arrivée d'un futur événement (constat empirique §4.5).
+         */
+        // Suffisamment long pour laisser l'animation de changement d'onglet d'Instagram se
+        // terminer (constat empirique : une vérification trop rapide, ~400ms, pouvait lire
+        // l'onglet Reels comme encore « sélectionné » en pleine transition et déclencher un
+        // second clic sur Accueil alors que le premier avait déjà réussi — d'où un aller-retour
+        // visible entre les deux onglets, Instagram traitant un second tap sur Accueil comme une
+        // demande de rafraîchissement/retour en haut du flux).
+        private const val VERIFY_DELAY_MS = 800L
+        private const val MAX_VERIFY_RETRIES = 2
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -46,6 +65,17 @@ class ReelsAccessibilityService : AccessibilityService() {
     private lateinit var historyRepository: HistoryRepository
     private var swipeTracker = SwipeSessionTracker(toleratedSwipes = 1)
     private var lastBlockUptimeMs = 0L
+
+    /**
+     * Empêche deux chaînes de redirection (clic + vérifications différées) de tourner en
+     * parallèle. Constat empirique : une chaîne dure jusqu'à ~1,6 s (plusieurs tentatives
+     * espacées de [VERIFY_DELAY_MS]), soit plus que l'ancien [BLOCK_COOLDOWN_MS] (1,5 s). Un
+     * nouvel événement légitime pouvait donc démarrer une seconde chaîne avant la fin de la
+     * première : les deux cliquaient sur l'onglet Accueil presque simultanément, ce qu'Instagram
+     * interprète comme une demande de rafraîchissement du flux (d'où les rafraîchissements en
+     * rafale observés). Cette garde rend les chaînes strictement séquentielles.
+     */
+    private var redirectChainActive = false
 
     /**
      * Cache synchrone de l'état d'activation, alimenté par [BlockedAppRepository.observe].
@@ -139,15 +169,38 @@ class ReelsAccessibilityService : AccessibilityService() {
             return
         }
 
+        if (redirectChainActive) {
+            @Suppress("DEPRECATION")
+            homeTab?.recycle()
+            Log.v(TAG, "Une chaîne de redirection est déjà en cours, on laisse le temps à l'UI de réagir")
+            return
+        }
+
         val now = SystemClock.uptimeMillis()
         if (now - lastBlockUptimeMs < BLOCK_COOLDOWN_MS) {
             @Suppress("DEPRECATION")
             homeTab?.recycle()
-            Log.v(TAG, "Redirection déjà effectuée récemment, on laisse le temps à l'UI de réagir")
+            Log.v(TAG, "Redirection terminée trop récemment, on laisse le temps à l'UI de réagir")
             return
         }
-        lastBlockUptimeMs = now
 
+        redirectChainActive = true
+        performRedirectAndVerify(homeTab, retryCount = 0)
+    }
+
+    /** Marque la fin d'une chaîne de redirection : à appeler sur chaque sortie de la chaîne. */
+    private fun endRedirectChain() {
+        lastBlockUptimeMs = SystemClock.uptimeMillis()
+        redirectChainActive = false
+    }
+
+    /**
+     * Effectue la redirection puis vérifie son effet réel après un court délai, en retentant
+     * si nécessaire (cf. [MAX_VERIFY_RETRIES]). Contourne volontairement le cooldown et le
+     * cache d'activation : une vérification n'est pas un nouvel événement de blocage, c'est la
+     * confirmation qu'un blocage déjà décidé a bien abouti.
+     */
+    private fun performRedirectAndVerify(homeTab: AccessibilityNodeInfo?, retryCount: Int) {
         // Cliquer sur l'onglet Accueil change d'onglet sans jamais quitter Instagram.
         // GLOBAL_ACTION_BACK est un repli : selon la pile interne d'Instagram au moment de
         // l'événement, il peut soit ne rien faire, soit faire sortir complètement de l'app
@@ -160,15 +213,51 @@ class ReelsAccessibilityService : AccessibilityService() {
         } ?: false
 
         if (navigatedViaTab) {
-            Log.i(TAG, "Blocage Reels activé : clic sur l'onglet Accueil")
+            Log.i(TAG, "Blocage Reels activé : clic sur l'onglet Accueil (tentative #${retryCount + 1})")
         } else {
             Log.w(TAG, "Onglet Accueil introuvable ou clic refusé, repli sur l'action Retour globale")
             performGlobalAction(GLOBAL_ACTION_BACK)
         }
         swipeTracker.reset()
 
-        scope.launch {
-            historyRepository.recordAttempt(AppIds.INSTAGRAM)
+        if (retryCount == 0) {
+            scope.launch {
+                historyRepository.recordAttempt(AppIds.INSTAGRAM)
+            }
+        }
+
+        if (retryCount >= MAX_VERIFY_RETRIES) {
+            endRedirectChain()
+            return
+        }
+
+        // Dispatchers.Main : rootInActiveWindow / performAction doivent s'exécuter sur le
+        // même thread que les événements d'accessibilité (le thread principal du service),
+        // pas sur le pool par défaut utilisé pour les écritures en base.
+        scope.launch(Dispatchers.Main) {
+            delay(VERIFY_DELAY_MS)
+            val stillOnReels = try {
+                rootInActiveWindow
+            } catch (_: Exception) {
+                null
+            }
+            try {
+                val stillBlocked = stillOnReels != null &&
+                        stillOnReels.packageName?.toString() == AppIds.INSTAGRAM &&
+                        blockingEnabledCache &&
+                        InstagramUiDetector.isGeneralReelsFeed(stillOnReels)
+
+                if (stillBlocked) {
+                    Log.w(TAG, "Toujours sur Reels après redirection, nouvelle tentative")
+                    val retryHomeTab = InstagramUiDetector.findHomeTabNode(stillOnReels)
+                    performRedirectAndVerify(retryHomeTab, retryCount + 1)
+                } else {
+                    endRedirectChain()
+                }
+            } finally {
+                @Suppress("DEPRECATION")
+                stillOnReels?.recycle()
+            }
         }
     }
 

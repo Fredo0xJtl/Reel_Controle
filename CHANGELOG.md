@@ -94,6 +94,70 @@ cahier des charges, centré sur l'onglet Reels général (§3.1).
 composants sont affichés) est un signal de moins en moins fiable. L'état de navigation
 explicite (quel onglet est sélectionné) reste le seul signal stable dans le temps.
 
+### Bug 5 — Le Reels reste bloqué ouvert après des clics répétés
+
+**Symptôme** : à force de cliquer rapidement sur des Reels successifs, l'utilisateur finissait
+par rester coincé sur l'onglet Reels malgré le service actif.
+
+**Cause** : `AccessibilityEvent` n'est déclenché que par un *changement* d'arbre UI. Une vidéo
+Reels qui joue simplement sans changement de vue ne génère plus aucun événement. Si le clic du
+service sur l'onglet Accueil entre en concurrence avec un vrai tap de l'utilisateur et que ce
+dernier « gagne » (Reels reste affiché), aucun futur événement n'arrivera pour permettre une
+nouvelle tentative : le blocage restait silencieusement en échec.
+
+**Correction** : après chaque clic de redirection, vérification différée (`VERIFY_DELAY_MS`,
+initialement 400ms) de l'état réel de l'écran, avec jusqu'à `MAX_VERIFY_RETRIES` nouvelles
+tentatives si l'onglet Reels est toujours sélectionné. Exécutée explicitement sur
+`Dispatchers.Main`, car `rootInActiveWindow`/`performAction` doivent rester sur le thread
+principal du service (contrairement aux écritures Room, faites sur le dispatcher par défaut).
+
+**Leçon** : un service piloté par événements ne doit jamais supposer qu'une action a réussi
+simplement parce qu'aucune erreur n'a été levée ; sans vérification active du résultat, un échec
+silencieux causé par une course avec l'utilisateur devient impossible à rattraper.
+
+### Bug 6 — « Flash » visible entre deux pages après la redirection
+
+**Symptôme** : une fois la vérification+retry du bug 5 en place, l'écran faisait un aller-retour
+visible entre Reels et Accueil au lieu d'un changement d'onglet net.
+
+**Cause** : le délai de vérification (400ms) était trop court et lisait l'arbre d'accessibilité
+en pleine animation de transition d'onglet d'Instagram, l'interprétant à tort comme « toujours
+sur Reels » et déclenchant un second clic sur Accueil pendant que le premier venait tout juste
+d'aboutir.
+
+**Correction** : délai porté à 800ms (`VERIFY_DELAY_MS`) et nombre de tentatives réduit à 2
+(`MAX_VERIFY_RETRIES`), laissant l'animation native d'Instagram se terminer avant toute lecture
+de l'état.
+
+**Leçon** : une vérification post-action doit laisser le temps aux animations natives de l'app
+ciblée de se terminer, sous peine de lire un état transitoire et de déclencher des actions
+correctives inutiles.
+
+### Bug 7 — Rafraîchissements non-stop du feed Accueil
+
+**Symptôme** : après une redirection vers Accueil, le feed se rafraîchissait en boucle continue
+au lieu de se stabiliser.
+
+**Cause** : plusieurs chaînes de redirection (clic + vérifications différées) pouvaient tourner
+en parallèle. Une chaîne complète dure jusqu'à ~1,6s (plusieurs tentatives espacées de
+`VERIFY_DELAY_MS`), soit plus que l'ancien `BLOCK_COOLDOWN_MS` (1,5s) — mesuré depuis le
+*début* de la chaîne précédente. Un nouvel événement légitime pouvait donc démarrer une
+seconde chaîne avant la fin de la première : les deux cliquaient sur l'onglet Accueil presque
+simultanément, ce qu'Instagram interprète comme une demande de rafraîchissement du flux.
+Diagnostiqué via des logs montrant des numéros de tentative incohérents dans le temps
+(« tentative #3 » suivie peu après de « tentative #1 »), preuve de deux chaînes actives en
+même temps.
+
+**Correction** : ajout d'un verrou explicite `redirectChainActive`, rendant les chaînes de
+redirection strictement séquentielles (toute nouvelle tentative de blocage est ignorée tant
+qu'une chaîne est en cours). Le cooldown redémarre désormais à la *fin* de la chaîne
+(`endRedirectChain()`), pas à son début.
+
+**Leçon** : un cooldown basé sur un timestamp de départ n'est fiable que si la durée de
+l'opération qu'il protège est constante. Dès qu'une opération peut avoir une durée variable
+(ici, un nombre de retries non déterministe), un verrou d'état explicite est la seule garantie
+réelle d'exclusivité mutuelle.
+
 ### Durcissement additionnel (anticipation, pas de bug constaté)
 
 - **Anti-rebond** (`BLOCK_COOLDOWN_MS = 1500`) : un écran Reels émet plusieurs événements de
