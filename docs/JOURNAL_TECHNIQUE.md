@@ -196,9 +196,19 @@ Un cluster de ~160 lignes dans `InstagramUiDetector` — `isGeneralReelsFeed`, `
 
 ---
 
+## 14. Tap résiduel sur l'onglet Reels dédié — 2026-08-05
+
+**Symptôme constaté après la release v2.4.1** : après plusieurs taps rapprochés sur l'onglet Reels dédié (chacun renvoyant à Accueil), un Reel ouvert depuis le feed juste après était parfois fermé instantanément, sans la tolérance de swipe normalement accordée au feed — un second tap, une fois un certain délai passé, fonctionnait normalement, d'où l'impression qu'il fallait "re-cliquer" pour que ça reste ouvert.
+
+**Cause** : `reelsTabTappedAtUptimeMs` (horodatage du dernier clic détecté sur l'onglet dédié, utilisé pour classer le prochain lecteur ouvert) restait "récent" pendant toute la durée de `REELS_TAB_TAP_VALIDITY_MS` (2 s) même quand le tap n'avait jamais mené à l'ouverture d'un lecteur (déjà bloqué et refermé, tap ignoré par Instagram…). Un Reel du feed ouvert dans cette fenêtre héritait donc à tort du tap résiduel.
+
+**Solution** : nouvelle constante `REELS_TAB_TAP_STALE_AT_HOME_MS` (400 ms, largement suffisante puisqu'un lecteur s'ouvre en pratique quelques dizaines de ms après le tap) — purge du tap résiduel dès le retour sur un écran sans lecteur ouvert, indépendamment du verrou `redirectChainActive`. Validé sur le terrain.
+
+---
+
 ## Bilan des versions
 
-V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → **v2.4.1** (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort).
+V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → **v2.4.2** (fix tap résiduel onglet Reels dédié, validé terrain).
 
 ## Compétences illustrées par ce projet
 

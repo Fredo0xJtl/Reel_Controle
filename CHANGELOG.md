@@ -237,6 +237,15 @@ Synthèse ; diagnostic complet dans [docs/JOURNAL_TECHNIQUE.md](docs/JOURNAL_TEC
   externe avant suppression).
 - Journal technique complété.
 
+## v2.4.2 — Fix tap résiduel onglet Reels dédié (2026-08-05)
+
+- Après plusieurs taps rapprochés sur l'onglet Reels dédié (chacun renvoyant à Accueil), un
+  Reel ouvert depuis le feed juste après pouvait être classé à tort "onglet dédié" à cause
+  d'un tap non consommé n'ayant jamais mené à l'ouverture d'un lecteur — fermé instantanément
+  sans tolérance de swipe.
+- Correction : `REELS_TAB_TAP_STALE_AT_HOME_MS` (400ms) purge le tap résiduel dès le retour
+  sur un écran sans lecteur ouvert, indépendamment de `redirectChainActive`. Validé terrain.
+
 ## V1.0-beta — Version initiale
 
 Voir [DEPLOYMENT.md](DEPLOYMENT.md) et [README.md](README.md) pour l'état des lieux avant
