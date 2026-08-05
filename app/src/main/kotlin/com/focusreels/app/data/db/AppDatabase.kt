@@ -29,7 +29,14 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "focus_reels.db"
-                ).build().also { instance = it }
+                )
+                    // Filet de sécurité tant qu'aucune migration explicite n'existe : sans cela,
+                    // un futur changement de schéma (version 2+) fait planter l'app au démarrage
+                    // au lieu de recréer la base. Perte de données locale acceptable ici (aucune
+                    // synchronisation, contenu recréable) ; à retirer le jour où une vraie
+                    // migration est écrite.
+                    .fallbackToDestructiveMigration()
+                    .build().also { instance = it }
             }
     }
 }

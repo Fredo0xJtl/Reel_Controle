@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap">
+<style>
+body{margin:0;background:#dfe3d4;background-image:radial-gradient(rgba(23,48,40,0.12) 1px,transparent 1px);background-size:14px 14px;font-family:'IBM Plex Sans',sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+*::-webkit-scrollbar{width:0;height:0}
+@keyframes pulse-accent{0%,100%{opacity:1}50%{opacity:0.45}}
+@keyframes num-pop{0%{transform:scale(1.08)}100%{transform:scale(1)}}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:48px;gap:40px;flex-wrap:wrap;background:#e7e5e0">
+
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{isDark}}" width="390" height="844" hint-size="390,844">
+<div style="width:100%;height:100%;display:flex;flex-direction:column;background:{{bg}};color:{{text}};font-family:'IBM Plex Sans',sans-serif;overflow:hidden;position:relative">
+
+  <!-- HOME -->
+  <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:auto;scrollbar-gutter:stable">
+    <div style="padding:20px 20px 0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between">
+        <div style="font-size:20px;font-weight:800;letter-spacing:-0.02em">RÉELS CONTRÔLE</div>
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:{{sub}}">v1.0.3</div>
+      </div>
+    </div>
+
+<sc-if value="{{showOffAlert}}" hint-placeholder-val="{{false}}">
+    <div style="margin:20px 20px 0">
+      <div style="height:5px;background:{{stripes}}"></div>
+      <div style="padding:11px 14px;background:#0a0a0a;color:#fff;display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;letter-spacing:0.03em">
+        <span style="color:{{accent}};font-size:15px">⚠</span>ALERTE — REELS ACCESSIBLE, BLOCAGE INACTIF
+      </div>
+    </div>
+    </sc-if>
+    <div style="margin:22px 20px 0;padding:20px;background:{{statusBg}};color:{{statusText}};border:2px solid {{text}};box-shadow:6px 6px 0 {{border}};transition:background .15s,color .15s">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;opacity:0.7">STATUT</div>
+          <div style="font-size:21px;font-weight:800;margin-top:4px;letter-spacing:-0.01em">{{statusLabel}}</div>
+        </div>
+        <div onClick="{{toggleBlocking}}" style="width:52px;height:30px;border:2px solid {{statusText}};background:{{switchTrack}};position:relative;flex-shrink:0" style-active="transform:scale(0.94)">
+          <div style="position:absolute;top:2px;left:{{switchLeft}};width:22px;height:22px;background:{{switchKnob}};transition:left .15s"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin:22px 20px 0;padding:20px;background:{{surface}};border:2px solid {{text}};box-shadow:6px 6px 0 {{border}};display:flex;gap:24px">
+      <div style="flex:1">
+        <div style="font-family:'Space Mono',monospace;font-size:44px;font-weight:700;line-height:1">{{todayBlockedCount}}</div>
+        <div style="font-size:12px;color:{{sub}};margin-top:8px;line-height:1.3;text-transform:uppercase;letter-spacing:0.04em">tentatives bloquées<br/>aujourd'hui</div>
+      </div>
+      <div style="width:2px;background:{{border}}"></div>
+      <div style="flex:1">
+        <div style="font-family:'Space Mono',monospace;font-size:44px;font-weight:700;line-height:1">{{streakDays}}</div>
+        <div style="font-size:12px;color:{{sub}};margin-top:8px;line-height:1.3;text-transform:uppercase;letter-spacing:0.04em">jours sans<br/>déblocage</div>
+      </div>
+    </div>
+
+    <div style="margin:24px 20px 0;height:2px;background:{{border}}"></div>
+    <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:15px;font-weight:600">Instagram — Reels</span>
+      <span style="font-family:'Space Mono',monospace;font-size:12px;color:{{sub}}">{{appStatusShort}}</span>
+    </div>
+    <div style="height:2px;background:{{border}}"></div>
+  </div>
+  </sc-if>
+
+  <!-- HISTORY -->
+  <sc-if value="{{isHistory}}" hint-placeholder-val="{{false}}">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:auto;scrollbar-gutter:stable">
+    <div style="padding:20px 20px 16px">
+      <div style="font-size:20px;font-weight:800;letter-spacing:-0.02em">HISTORIQUE</div>
+    </div>
+    <sc-for list="{{history}}" as="grp" hint-placeholder-count="2">
+      <div>
+        <div style="border-top:2px solid {{text}};border-bottom:2px solid {{text}};padding:9px 20px;display:flex;justify-content:space-between;background:{{text}};color:{{surface}}">
+          <span style="font-size:12px;font-weight:700;letter-spacing:0.08em">{{grp.day}}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:12px">{{grp.count}}</span>
+        </div>
+        <sc-for list="{{grp.entries}}" as="e" hint-placeholder-count="2">
+          <div style="padding:13px 20px;display:flex;gap:14px;align-items:baseline;border-bottom:1px solid {{border}}">
+            <span style="font-family:'Space Mono',monospace;font-size:13px;color:{{sub}};flex-shrink:0">{{e.time}}</span>
+            <span style="font-size:14px">{{e.label}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <!-- SETTINGS -->
+  <sc-if value="{{isSettings}}" hint-placeholder-val="{{false}}">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:auto;scrollbar-gutter:stable">
+    <div style="padding:20px 20px 16px">
+      <div style="font-size:20px;font-weight:800;letter-spacing:-0.02em">RÉGLAGES</div>
+    </div>
+
+    <div style="padding:0 20px 6px;font-size:11px;font-weight:700;letter-spacing:0.08em;color:{{sub}}">FRICTION PROGRESSIVE</div>
+    <div style="border-top:2px solid {{border}}">
+      <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid {{border}}">
+        <span style="font-size:14px">Délai de base</span>
+        <div style="display:flex;align-items:center;gap:14px">
+          <button onClick="{{decBase}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">−</button>
+          <span style="font-family:'Space Mono',monospace;font-size:15px;width:44px;text-align:center">{{settings.baseDelay}}s</span>
+          <button onClick="{{incBase}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">+</button>
+        </div>
+      </div>
+      <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid {{border}}">
+        <span style="font-size:14px">Incrément par tentative</span>
+        <div style="display:flex;align-items:center;gap:14px">
+          <button onClick="{{decIncrement}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">−</button>
+          <span style="font-family:'Space Mono',monospace;font-size:15px;width:44px;text-align:center">{{settings.increment}}s</span>
+          <button onClick="{{incIncrement}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:16px 20px 6px;font-size:11px;font-weight:700;letter-spacing:0.08em;color:{{sub}}">REVERROUILLAGE</div>
+    <div style="border-top:2px solid {{border}}">
+      <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid {{border}}">
+        <span style="font-size:14px">Reverrouillage automatique</span>
+        <div style="display:flex;align-items:center;gap:14px">
+          <button onClick="{{decRelock}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">−</button>
+          <span style="font-family:'Space Mono',monospace;font-size:15px;width:44px;text-align:center">{{settings.relock}}m</span>
+          <button onClick="{{incRelock}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:16px 20px 6px;font-size:11px;font-weight:700;letter-spacing:0.08em;color:{{sub}}">TOLÉRANCE DM</div>
+    <div style="border-top:2px solid {{border}}">
+      <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid {{border}}">
+        <span style="font-size:14px">Swipes tolérés après DM</span>
+        <div style="display:flex;align-items:center;gap:14px">
+          <button onClick="{{decSwipes}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">−</button>
+          <span style="font-family:'Space Mono',monospace;font-size:15px;width:44px;text-align:center">{{settings.swipes}}</span>
+          <button onClick="{{incSwipes}}" style="width:30px;height:30px;border:2px solid {{text}};background:none;color:{{text}};font-size:16px;font-weight:700;transition:background .1s,color .1s" style-hover="background:{{text}};color:{{surface}}">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:16px 20px 10px;font-size:11px;font-weight:700;letter-spacing:0.08em;color:{{sub}}">APPARENCE</div>
+    <div style="border-top:2px solid {{border}};display:flex">
+      <button onClick="{{setThemeLight}}" style="flex:1;padding:12px;border:none;border-right:1px solid {{border}};background:{{themeLightBg}};color:{{themeLightText}};font-size:13px;font-weight:600">CLAIR</button>
+      <button onClick="{{setThemeDark}}" style="flex:1;padding:12px;border:none;border-right:1px solid {{border}};background:{{themeDarkBg}};color:{{themeDarkText}};font-size:13px;font-weight:600">SOMBRE</button>
+      <button onClick="{{setThemeSystem}}" style="flex:1;padding:12px;border:none;background:{{themeSystemBg}};color:{{themeSystemText}};font-size:13px;font-weight:600">SYSTÈME</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- FRICTION / UNLOCK -->
+  <sc-if value="{{isFriction}}" hint-placeholder-val="{{false}}">
+  <div style="flex:1;display:flex;flex-direction:column;background:#0c1613;color:#eef2ee;position:relative;overflow:hidden">
+    <div style="height:7px;background:{{stripes}};background-size:28px 28px;width:{{progressPercent}};transition:width 1s linear;animation:pulse-accent 1.6s ease-in-out infinite"></div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px;text-align:center">
+      <div style="font-family:'Space Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#7fa396">TENTATIVE {{attemptDisplay}} AUJOURD'HUI</div>
+      <div style="font-family:'Space Mono',monospace;font-weight:700;font-size:112px;line-height:1;margin-top:18px;animation:num-pop 0.3s ease-out">{{remainingSeconds}}<span style="font-size:36px">s</span></div>
+      <div style="width:64px;height:4px;background:{{accent}};margin:26px 0 20px"></div>
+      <div style="font-size:30px;font-weight:800;letter-spacing:-0.02em">Reels bloqué.</div>
+      <div style="font-size:13px;color:#7fa396;margin-top:10px;max-width:260px;line-height:1.5">La friction augmente à chaque nouvelle tentative. Réinitialisation à minuit.</div>
+    </div>
+    <div style="padding:24px 32px 40px">
+      <button onClick="{{cancelFriction}}" style="width:100%;padding:16px;background:none;border:2px solid #eef2ee;color:#eef2ee;font-size:14px;font-weight:700;letter-spacing:0.05em;transition:background .1s,color .1s" style-hover="background:#eef2ee;color:#0c1613">ANNULER</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- BOTTOM NAV -->
+  <sc-if value="{{showNav}}" hint-placeholder-val="{{true}}">
+  <div style="display:flex;border-top:2px solid {{text}};background:{{surface}};flex-shrink:0">
+    <button onClick="{{goHome}}" style="flex:1;padding:14px 0;background:{{navHomeBg}};border:none;border-right:1px solid {{border}};color:{{navHomeColor}};font-size:11px;font-weight:{{navHomeWeight}};letter-spacing:0.05em;transition:background .1s">ACCUEIL</button>
+    <button onClick="{{goHistory}}" style="flex:1;padding:14px 0;background:{{navHistoryBg}};border:none;border-right:1px solid {{border}};color:{{navHistoryColor}};font-size:11px;font-weight:{{navHistoryWeight}};letter-spacing:0.05em;transition:background .1s">HISTORIQUE</button>
+    <button onClick="{{goSettings}}" style="flex:1;padding:14px 0;background:{{navSettingsBg}};border:none;color:{{navSettingsColor}};font-size:11px;font-weight:{{navSettingsWeight}};letter-spacing:0.05em;transition:background .1s">RÉGLAGES</button>
+  </div>
+  </sc-if>
+
+</div>
+</x-import>
+
+<div style="display:flex;flex-direction:column;gap:20px;align-items:center">
+  <div style="width:168px;height:168px;background:{{text}};position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <div style="width:96px;height:96px;border:10px solid {{surface}};border-radius:50%;position:relative"></div>
+    <div style="position:absolute;width:130px;height:14px;background:{{surface}};transform:rotate(45deg)"></div>
+  </div>
+  <div style="text-align:center">
+    <div style="font-size:15px;font-weight:800;letter-spacing:0.02em">RÉELS CONTRÔLE</div>
+    <div style="font-family:'Space Mono',monospace;font-size:10px;color:#6b6b6f;margin-top:2px;letter-spacing:0.05em">ICÔNE / LAUNCHER MARK</div>
+  </div>
+</div>
+
+<div style="font-family:'Space Mono',monospace;font-size:12px;color:#6b6b6f;max-width:280px;line-height:1.6">
+  Design brutaliste — Focus Reels.<br/>
+  Cliquez le switch d'accueil pour tester l'écran de friction.<br/>
+  Onglets bas de l'appareil pour naviguer.
+</div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:700,&quot;height&quot;:900},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;light&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Apparence&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: this.props.theme || 'light',
+    screen: 'home',
+    blocking: true,
+    remainingSeconds: 0,
+    totalSeconds: 0,
+    attemptsToday: 2,
+    todayBlockedCount: 12,
+    streakDays: 7,
+    settings: { baseDelay: 5, increment: 5, relock: 30, swipes: 2 },
+    history: [
+      { day: "AUJOURD'HUI", count: 3, entries: [
+        { time: '14:32', label: 'Tentative bloquée' },
+        { time: '11:05', label: 'Tentative bloquée' },
+        { time: '09:47', label: 'Débloqué — 10 s de friction' }
+      ]},
+      { day: 'HIER', count: 5, entries: [
+        { time: '21:18', label: 'Tentative bloquée' },
+        { time: '19:40', label: 'Tentative bloquée' },
+        { time: '18:02', label: 'Débloqué — 15 s de friction' },
+        { time: '13:11', label: 'Tentative bloquée' },
+        { time: '08:30', label: 'Tentative bloquée' }
+      ]}
+    ]
+  };
+
+  componentWillUnmount() { if (this.timerId) clearInterval(this.timerId); }
+
+  goTo = (screen) => this.setState({ screen });
+
+  toggleBlocking = () => {
+    if (this.state.blocking) {
+      const s = this.state.settings;
+      const total = s.baseDelay + s.increment * this.state.attemptsToday;
+      this.setState({ screen: 'friction', totalSeconds: total, remainingSeconds: total });
+      if (this.timerId) clearInterval(this.timerId);
+      this.timerId = setInterval(() => {
+        this.setState((st) => {
+          const rem = st.remainingSeconds - 1;
+          if (rem <= 0) {
+            clearInterval(this.timerId);
+            const hist = st.history.slice();
+            const today = hist[0];
+            const updatedToday = { ...today, count: today.count + 1, entries: [{ time: 'maintenant', label: `Débloqué — ${st.totalSeconds} s de friction` }, ...today.entries] };
+            return {
+              blocking: false, screen: 'home', remainingSeconds: 0,
+              attemptsToday: st.attemptsToday + 1,
+              history: [updatedToday, ...hist.slice(1)]
+            };
+          }
+          return { remainingSeconds: rem };
+        });
+      }, 1000);
+    } else {
+      this.setState({ blocking: true });
+    }
+  };
+
+  cancelFriction = () => {
+    if (this.timerId) clearInterval(this.timerId);
+    this.setState({ screen: 'home' });
+  };
+
+  updSetting = (key, delta, min, max) => this.setState((st) => ({
+    settings: { ...st.settings, [key]: Math.max(min, Math.min(max, st.settings[key] + delta)) }
+  }));
+
+  setTheme = (t) => this.setState({ theme: t });
+
+  renderVals() {
+    const st = this.state;
+    const isDark = st.theme === 'dark';
+    const bg = isDark ? '#141a17' : '#eef0e6';
+    const surface = isDark ? '#1c2622' : '#ffffff';
+    const text = isDark ? '#eef2ee' : '#173028';
+    const sub = isDark ? '#8ea69c' : '#4d6459';
+    const border = isDark ? '#2f3f38' : '#173028';
+    const accent = '#e2451f';
+    const stripes = `repeating-linear-gradient(-45deg, ${accent} 0 10px, #0a0a0a 10px 20px)`;
+
+    const screen = st.screen;
+    const s = st.settings;
+
+    return {
+      isDark, bg, surface, text, sub, border, accent, stripes,
+      showOffAlert: !st.blocking,
+      isHome: screen === 'home', isHistory: screen === 'history',
+      isSettings: screen === 'settings', isFriction: screen === 'friction',
+      showNav: screen !== 'friction',
+      statusLabel: st.blocking ? 'BLOCAGE ACTIF' : 'BLOCAGE INACTIF',
+      appStatusShort: st.blocking ? 'bloqué' : 'débloqué',
+      switchTrack: st.blocking ? surface : text,
+      switchKnob: st.blocking ? text : surface,
+      switchLeft: st.blocking ? '24px' : '2px',
+      statusBg: st.blocking ? text : surface,
+      statusText: st.blocking ? surface : text,
+      toggleBlocking: this.toggleBlocking,
+      todayBlockedCount: st.todayBlockedCount,
+      streakDays: st.streakDays,
+      history: st.history,
+      settings: s,
+      decBase: () => this.updSetting('baseDelay', -1, 1, 60),
+      incBase: () => this.updSetting('baseDelay', 1, 1, 60),
+      decIncrement: () => this.updSetting('increment', -1, 0, 60),
+      incIncrement: () => this.updSetting('increment', 1, 0, 60),
+      decRelock: () => this.updSetting('relock', -5, 5, 240),
+      incRelock: () => this.updSetting('relock', 5, 5, 240),
+      decSwipes: () => this.updSetting('swipes', -1, 0, 20),
+      incSwipes: () => this.updSetting('swipes', 1, 0, 20),
+      setThemeLight: () => this.setTheme('light'),
+      setThemeDark: () => this.setTheme('dark'),
+      setThemeSystem: () => this.setTheme('light'),
+      themeLightBg: !isDark ? text : 'none', themeLightText: !isDark ? surface : sub,
+      themeDarkBg: isDark ? text : 'none', themeDarkText: isDark ? surface : sub,
+      themeSystemBg: 'none', themeSystemText: sub,
+      attemptDisplay: st.attemptsToday + 1,
+      remainingSeconds: st.remainingSeconds,
+      progressPercent: st.totalSeconds ? `${100 - (st.remainingSeconds / st.totalSeconds) * 100}%` : '0%',
+      cancelFriction: this.cancelFriction,
+      goHome: () => this.goTo('home'), goHistory: () => this.goTo('history'), goSettings: () => this.goTo('settings'),
+      navHomeWeight: screen === 'home' ? 700 : 500, navHomeBg: screen === 'home' ? text : 'none', navHomeColor: screen === 'home' ? surface : sub,
+      navHistoryWeight: screen === 'history' ? 700 : 500, navHistoryBg: screen === 'history' ? text : 'none', navHistoryColor: screen === 'history' ? surface : sub,
+      navSettingsWeight: screen === 'settings' ? 700 : 500, navSettingsBg: screen === 'settings' ? text : 'none', navSettingsColor: screen === 'settings' ? surface : sub,
+    };
+  }
+}
+</script>
+</body>
+</html>

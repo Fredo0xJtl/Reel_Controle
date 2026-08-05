@@ -7,7 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.focusreels.app.FocusReelsApplication
 import com.focusreels.app.data.repository.BlockedAppRepository
-import com.focusreels.app.domain.FrictionCalculator
+import com.focusreels.app.data.repository.HistoryRepository
 import com.focusreels.app.domain.RelockScheduler
 import com.focusreels.app.ui.theme.FocusReelsTheme
 import kotlinx.coroutines.launch
@@ -22,23 +22,27 @@ class UnlockFrictionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME)
-        if (packageName == null) {
+        // Nommé différemment de `Context.packageName` (celui de l'app elle-même) : il s'agit ici
+        // du package de l'application *gérée* (ex. Instagram), pas de Focus Reels.
+        val targetPackageName = intent.getStringExtra(EXTRA_PACKAGE_NAME)
+        if (targetPackageName == null) {
             finish()
             return
         }
 
         val app = application as FocusReelsApplication
         val repository = BlockedAppRepository(app.database)
+        val historyRepository = HistoryRepository(app.database)
 
         setContent {
             FocusReelsTheme {
                 UnlockFrictionScreen(
-                    packageName = packageName,
+                    packageName = targetPackageName,
                     repository = repository,
+                    historyRepository = historyRepository,
                     onCancel = { finish() },
                     onUnlocked = { relockDelayMinutes ->
-                        RelockScheduler.scheduleRelock(this, packageName, relockDelayMinutes)
+                        RelockScheduler.scheduleRelock(this, targetPackageName, relockDelayMinutes)
                         finish()
                     }
                 )

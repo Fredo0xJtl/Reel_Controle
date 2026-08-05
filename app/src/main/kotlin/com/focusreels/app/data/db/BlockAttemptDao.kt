@@ -16,4 +16,7 @@ interface BlockAttemptDao {
 
     @Query("SELECT COUNT(*) FROM block_attempts WHERE packageName = :packageName")
     fun observeCount(packageName: String): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM block_attempts WHERE packageName = :packageName AND timestampMillis >= :todayStartMillis")
+    fun observeCountToday(packageName: String, todayStartMillis: Long): Flow<Int>
 }

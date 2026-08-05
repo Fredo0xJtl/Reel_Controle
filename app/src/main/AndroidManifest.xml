@@ -6,12 +6,12 @@
         L'application ne doit jamais pouvoir émettre de trafic réseau.
     -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:name=".FocusReelsApplication"
         android:allowBackup="false"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:theme="@style/Theme.FocusReels"
         android:usesCleartextTraffic="false">
@@ -30,7 +30,9 @@
             android:name=".ui.unlock.UnlockFrictionActivity"
             android:exported="false"
             android:excludeFromRecents="true"
-            android:theme="@style/Theme.FocusReels" />
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.FocusReels"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
 
         <service
             android:name=".accessibility.ReelsAccessibilityService"
@@ -45,13 +47,11 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <receiver
-            android:name=".domain.RelockBootReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
+        <!--
+            Pas de receiver BOOT_COMPLETED applicatif : WorkManager reprogramme seul, via son
+            propre receiver interne, les OneTimeWorkRequest persistés après redémarrage. La
+            permission RECEIVE_BOOT_COMPLETED ci-dessus reste nécessaire pour ce mécanisme.
+        -->
 
     </application>
 </manifest>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Premier plan de l'icône adaptative : cercle blanc contour barré d'une barre pivotée à 45°,
+  symbole universel de blocage (handoff Claude Design, `.docs/design_handoff`). Dimensionné pour
+  rester dans la "safe zone" centrale de 66dp (le masque système — rond, carré arrondi, squircle
+  selon le launcher — peut rogner tout ce qui dépasse) : la diagonale de la barre pivotée reste
+  sous ce rayon de sécurité, contrairement au dessin brut à pleine échelle du handoff.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,30 a24,24 0 1,1 0,48 a24,24 0 1,1 0,-48z"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5" />
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="45">
+        <path
+            android:pathData="M21.5,50.5h65v7h-65z"
+            android:fillColor="#FFFFFF" />
+    </group>
+</vector>

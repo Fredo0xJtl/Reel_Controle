@@ -11,3 +11,6 @@ local.properties
 *.apk
 *.aab
 /app/build
+
+# APK publiée pour téléchargement direct depuis le repo GitHub (exception au blocage *.apk ci-dessus).
+!/APK/*.apk
