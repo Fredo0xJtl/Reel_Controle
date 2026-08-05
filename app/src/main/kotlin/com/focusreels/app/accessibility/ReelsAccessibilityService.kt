@@ -181,6 +181,22 @@ class ReelsAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+
+        // Réinitialiser tous les flags d'état (surtout après un redémarrage du service).
+        // Sans cela, un cycle désactiver/réactiver peut laisser des états figés
+        // qui bloquent le blocage futur (ex. redirectChainActive collé à true).
+        redirectChainActive = false
+        consecutiveViewerDetections = 0
+        wasViewerOpenLastScan = false
+        viewerOriginDecided = false
+        currentViewerIsDm = false
+        currentViewerIsFromFeed = false
+        lastBlockUptimeMs = 0L
+        lastScanUptimeMs = 0L
+        savedMusicVolume = null
+        swipeTracker = SwipeSessionTracker(toleratedSwipes = Defaults.TOLERATED_SWIPES_AFTER_DM)
+        unmuteMediaAudio()
+
         val app = application as FocusReelsApplication
         blockedAppRepository = BlockedAppRepository(app.database)
         historyRepository = HistoryRepository(app.database)
