@@ -12,13 +12,14 @@ android {
         applicationId = "com.focusreels.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 41
-        versionName = "2.4.4"
+        versionCode = 42
+        versionName = "2.4.5"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

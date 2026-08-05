@@ -224,9 +224,21 @@ Un cluster de ~160 lignes dans `InstagramUiDetector` — `isGeneralReelsFeed`, `
 
 ---
 
+## 17. Passe d'optimisation — 2026-08-05
+
+**Demande** : "vois si tu peux faire des opti" (taille APK, performance/batterie, qualité du code).
+
+**Taille de l'APK** : `isMinifyEnabled`/`isShrinkResources` désactivés depuis le début (§4) par prudence — Room et WorkManager reposent en partie sur la réflexion (Room via ses classes générées, WorkManager pour instancier un `Worker` par son nom de classe stocké en base), et R8 peut renommer/supprimer du code qui n'est référencé que par réflexion sans règle de conservation explicite. Activé cette fois avec règles ProGuard ciblées (`RelockWorker`, entités Room) et validation manuelle complète sur appareil réel avant de considérer le changement sûr : build signé localement (keystore debug, `zipalign` + `apksigner` manuels puisqu'aucune config de signature release n'existe dans le projet), installé, testé (écran d'accueil, lecture Room au démarrage, écriture Room via le switch de blocage, aucun crash en logcat). Résultat : 19,3 MB → 2,3 MB.
+
+**Performance/batterie** : relecture de `ReelsAccessibilityService`/`InstagramUiDetector` — l'essentiel avait déjà été traité à l'audit v2.4.1 (§12, cadence adaptative, recyclage systématique). Rien de significatif trouvé au-delà.
+
+**Qualité du code** : une fuite mineure trouvée dans `dumpMatchingIds` (fonction de diagnostic terrain, désactivée par défaut) — ne recyclait pas les nœuds enfants contrairement à `dumpTree`. Corrigée par prudence pour une future session de calibrage terrain.
+
+---
+
 ## Bilan des versions
 
-V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → v2.4.3 (fix debounce de fermeture du lecteur en stress test, validé terrain) → **v2.4.4** (renommage "Réel Ctrl", titre d'accueil restylé).
+V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → v2.4.3 (fix debounce de fermeture du lecteur en stress test, validé terrain) → v2.4.4 (renommage "Réel Ctrl", titre d'accueil restylé) → **v2.4.5** (APK release minifiée -88 %, fuite mineure corrigée).
 
 ## Compétences illustrées par ce projet
 

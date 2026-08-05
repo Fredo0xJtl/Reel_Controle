@@ -207,7 +207,15 @@ object InstagramUiDetector {
             Log.d(TAG, "[ids] $id text=${root.text} visible=${root.isVisibleToUser}")
         }
         for (i in 0 until root.childCount) {
-            dumpMatchingIds(root.getChild(i) ?: continue, keyword, depth + 1)
+            // Contrairement à [dumpTree], les enfants n'étaient pas recyclés ici — fuite d'un
+            // AccessibilityNodeInfo par nœud de l'arbre à chaque appel. Sans conséquence tant que
+            // DIAGNOSTIC_DUMP reste désactivé (seul appelant), mais piégeux pour une future session
+            // de diagnostic terrain où cette fonction tournerait à la cadence du scan (jusqu'à 33
+            // fois/seconde) sur l'arbre entier.
+            val child = root.getChild(i) ?: continue
+            dumpMatchingIds(child, keyword, depth + 1)
+            @Suppress("DEPRECATION")
+            child.recycle()
         }
     }
 

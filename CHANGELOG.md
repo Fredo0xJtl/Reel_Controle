@@ -271,6 +271,21 @@ Synthèse ; diagnostic complet dans [docs/JOURNAL_TECHNIQUE.md](docs/JOURNAL_TEC
   de lettres élargi, filet décoratif sous le titre calé sur sa largeur exacte
   (`Modifier.width(IntrinsicSize.Min)`).
 
+## v2.4.5 — Optimisations (taille APK + fuite mineure) (2026-08-05)
+
+- **Taille de l'APK release** : `isMinifyEnabled` et `isShrinkResources` activés (R8 + shrink
+  ressources), désactivés jusqu'ici par prudence (risque de casser Room/WorkManager par
+  réflexion sans validation terrain complète, cf. journal §4). Règles ProGuard ajoutées pour
+  `RelockWorker` (instancié par WorkManager via le nom de classe, sinon renommé/supprimé par
+  R8) et les entités Room. Validé sur appareil réel (signature debug locale, install + test
+  manuel : lecture/écriture Room, switch de blocage, pas de crash) avant activation définitive.
+  APK release : 19,3 MB → 2,3 MB (-88 %).
+- **Fuite mineure** : `InstagramUiDetector.dumpMatchingIds` (diagnostic terrain uniquement,
+  désactivé par défaut via `DIAGNOSTIC_DUMP`) ne recyclait pas les nœuds enfants parcourus,
+  contrairement à `dumpTree`. Sans conséquence en usage normal (jamais appelée), mais aurait
+  fui un `AccessibilityNodeInfo` par nœud de l'arbre à chaque scan si le diagnostic avait été
+  réactivé pour une future session terrain.
+
 ## V1.0-beta — Version initiale
 
 Voir [DEPLOYMENT.md](DEPLOYMENT.md) et [README.md](README.md) pour l'état des lieux avant
