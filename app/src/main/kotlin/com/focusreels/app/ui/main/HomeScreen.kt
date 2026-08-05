@@ -73,6 +73,9 @@ fun HomeScreen(
     val countTodayFlow = remember { historyRepository.observeCountToday(AppIds.INSTAGRAM) }
     val countToday by countTodayFlow.collectAsStateWithLifecycle(initialValue = 0)
 
+    val unlockCountTodayFlow = remember { historyRepository.observeUnlockCountToday(AppIds.INSTAGRAM) }
+    val unlockCountToday by unlockCountTodayFlow.collectAsStateWithLifecycle(initialValue = 0)
+
     // Un switch "activé" en base ne garantit rien si le service d'accessibilité a été coupé
     // par l'utilisateur ou tué par le système (MIUI/OneUI) : sans ce contrôle, l'app afficherait
     // un blocage actif qui ne bloque plus rien. Revérifié à chaque retour au premier plan.
@@ -206,7 +209,7 @@ fun HomeScreen(
                 }
             }
 
-            // Carte Stats : 2 colonnes séparées par un filet vertical.
+            // Carte Stats : 3 colonnes séparées par des filets verticaux.
             BrutalistCard(modifier = Modifier.fillMaxWidth().padding(20.dp, 22.dp, 20.dp, 0.dp)) {
                 Row(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
                     StatColumn(
@@ -221,9 +224,20 @@ fun HomeScreen(
                             .background(colors.border)
                     )
                     StatColumn(
-                        modifier = Modifier.weight(1f).padding(start = 24.dp),
+                        modifier = Modifier.weight(1f).padding(start = 24.dp, end = 24.dp),
                         value = streakDays.toString(),
                         label = "jours sans\ndéblocage"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(2.dp)
+                            .height(56.dp)
+                            .background(colors.border)
+                    )
+                    StatColumn(
+                        modifier = Modifier.weight(1f).padding(start = 24.dp),
+                        value = unlockCountToday.toString(),
+                        label = "déblocages\naujourd'hui"
                     )
                 }
             }

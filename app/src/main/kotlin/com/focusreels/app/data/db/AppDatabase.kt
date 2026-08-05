@@ -10,14 +10,19 @@ import androidx.room.RoomDatabase
  * exigence non négociable du cahier des charges (§4.4).
  */
 @Database(
-    entities = [BlockedAppEntity::class, BlockAttemptEntity::class],
-    version = 1,
+    entities = [BlockedAppEntity::class, BlockAttemptEntity::class, UnlockEventEntity::class],
+    // v1 -> v2 : ajout de unlock_events (compteur/graphique de déblocages, cf. HomeScreen /
+    // HistoryScreen). Couverte par fallbackToDestructiveMigration ci-dessous, pas de migration
+    // explicite écrite : perte de l'historique local acceptable (aucune synchronisation,
+    // contenu recréable, cf. commentaire sur le builder).
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun blockedAppDao(): BlockedAppDao
     abstract fun blockAttemptDao(): BlockAttemptDao
+    abstract fun unlockEventDao(): UnlockEventDao
 
     companion object {
         @Volatile

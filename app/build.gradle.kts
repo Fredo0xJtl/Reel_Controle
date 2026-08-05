@@ -12,8 +12,8 @@ android {
         applicationId = "com.focusreels.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 42
-        versionName = "2.4.5"
+        versionCode = 43
+        versionName = "2.4.6"
     }
 
     buildTypes {

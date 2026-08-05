@@ -112,12 +112,17 @@ fun UnlockFrictionScreen(
         }
 
         val current = repository.get(packageName) ?: return@LaunchedEffect
+        val unlockedAtMillis = System.currentTimeMillis()
         repository.save(
             current.copy(
                 blockingEnabled = false,
-                lastUnlockAtMillis = System.currentTimeMillis()
+                lastUnlockAtMillis = unlockedAtMillis
             )
         )
+        // Enregistré ICI (fin du compte à rebours), pas au moment où le switch est décoché sur
+        // l'accueil : décocher lance seulement cet écran de friction, le déblocage n'est acquis
+        // qu'à son terme (cf. [UnlockEventEntity]).
+        historyRepository.recordUnlock(packageName, unlockedAtMillis)
         onUnlocked(relockDelayMinutes)
     }
 

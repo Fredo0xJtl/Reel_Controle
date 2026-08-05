@@ -286,6 +286,22 @@ Synthèse ; diagnostic complet dans [docs/JOURNAL_TECHNIQUE.md](docs/JOURNAL_TEC
   fui un `AccessibilityNodeInfo` par nœud de l'arbre à chaque scan si le diagnostic avait été
   réactivé pour une future session terrain.
 
+## v2.4.6 — Compteur de déblocages sur l'accueil (2026-08-05)
+
+- **Nouvelle feature** : Ajout d'un troisième compteur sur la carte de statistiques de
+  l'écran d'accueil : « déblocages aujourd'hui » (nombre de fois où l'utilisateur a
+  désactivé le blocage après la friction). Complément visuel aux deux compteurs existants
+  (« tentatives bloquées aujourd'hui » et « jours sans déblocage »).
+- **Base de données** : nouvelle table `unlock_events` (symétrique à `block_attempts`,
+  via `UnlockEventEntity` et `UnlockEventDao`), enregistrant chaque déblocage avec un
+  timestamp. Migration v1→v2 gérée par `fallbackToDestructiveMigration()` (perte d'historique
+  acceptable, cf. exigence 4.4 : aucune sync réseau, contenu purement local).
+- **Timing** : l'événement de déblocage est enregistré une fois le compte à rebours de
+  friction écoulé (cf. `UnlockFrictionScreen`), pas au moment où l'utilisateur décoche le
+  switch — décocher lance l'écran, le déblocage n'est acquis qu'à son terme.
+- **UI** : layout de la carte stats réorganisé en 3 colonnes (séparées par des filets
+  verticaux) au lieu de 2, en appelant `HistoryRepository.observeUnlockCountToday()`.
+
 ## V1.0-beta — Version initiale
 
 Voir [DEPLOYMENT.md](DEPLOYMENT.md) et [README.md](README.md) pour l'état des lieux avant

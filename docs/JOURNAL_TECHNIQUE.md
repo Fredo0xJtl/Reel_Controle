@@ -236,9 +236,34 @@ Un cluster de ~160 lignes dans `InstagramUiDetector` — `isGeneralReelsFeed`, `
 
 ---
 
+## 18. Compteur de déblocages sur l'accueil — 2026-08-05
+
+**Demande** : "Il me faudrait aussi un compteur...par jour pour l'instant, où j'ai désactivait le blocage. Et peut-être voir pr add un graphique aussi pr ça."
+
+**Contexte** : L'écran d'accueil affichait déjà « tentatives bloquées aujourd'hui » (chaque fois que Reels était détecté) et « jours sans déblocage » (série de jours sans aucun déblocage volontaire). L'utilisateur veut aussi visualiser l'inverse : combien de fois *par jour* il a *activement désactivé* le blocage (après la friction).
+
+**Design de la feature** :
+
+1. **UnlockEventEntity** : nouvelle entité Room (table `unlock_events`), symétrique à `BlockAttemptEntity`. Enregistre une entrée quand le compte à rebours de friction s'écoule et que le blocage passe à `false`.
+
+2. **Timing du record** : dans `UnlockFrictionScreen`, l'événement est inscrit une fois le compte à rebours terminé (ligne 125, `historyRepository.recordUnlock(packageName, unlockedAtMillis)`), pas au moment où l'utilisateur décoche le switch. Décocher lance juste l'écran de friction ; le déblocage n'est acquis qu'à son terme.
+
+3. **UI — HomeScreen** : ajout d'un troisième compteur sur la carte stats. Layout réorganisé en 3 colonnes (au lieu de 2) :
+   - Colonne 1 : "tentatives bloquées aujourd'hui"
+   - Colonne 2 : "jours sans déblocage"
+   - Colonne 3 : "déblocages aujourd'hui"
+   
+   Trois colonnes séparées par des filets verticaux (`.width(2.dp).background(colors.border)`).
+
+4. **Schéma de BD** : version bumped v1 → v2, migration gérée par `fallbackToDestructiveMigration()` (perte d'historique acceptable, cf. exigence 4.4 : aucune sync réseau, contenu entièrement local).
+
+**Graphique** : pas implémenté dans cette itération (optionnel, peut être ajouté plus tard sur `HistoryScreen` si nécessaire).
+
+---
+
 ## Bilan des versions
 
-V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → v2.4.3 (fix debounce de fermeture du lecteur en stress test, validé terrain) → v2.4.4 (renommage "Réel Ctrl", titre d'accueil restylé) → **v2.4.5** (APK release minifiée -88 %, fuite mineure corrigée).
+V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → v2.4.3 (fix debounce de fermeture du lecteur en stress test, validé terrain) → v2.4.4 (renommage "Réel Ctrl", titre d'accueil restylé) → v2.4.5 (APK release minifiée -88 %, fuite mineure corrigée) → **v2.4.6** (compteur de déblocages sur l'accueil, nouvelle table unlock_events).
 
 ## Compétences illustrées par ce projet
 
