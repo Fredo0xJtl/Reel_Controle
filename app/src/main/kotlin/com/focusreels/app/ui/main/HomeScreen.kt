@@ -215,7 +215,7 @@ fun HomeScreen(
                     StatColumn(
                         modifier = Modifier.weight(1f),
                         value = countToday.toString(),
-                        label = "tentatives bloquées\naujourd'hui"
+                        label = "bloquées\nauj."
                     )
                     Box(
                         modifier = Modifier
@@ -224,7 +224,7 @@ fun HomeScreen(
                             .background(colors.border)
                     )
                     StatColumn(
-                        modifier = Modifier.weight(1f).padding(start = 24.dp, end = 24.dp),
+                        modifier = Modifier.weight(1f).padding(start = 16.dp, end = 16.dp),
                         value = streakDays.toString(),
                         label = "jours sans\ndéblocage"
                     )
@@ -235,9 +235,9 @@ fun HomeScreen(
                             .background(colors.border)
                     )
                     StatColumn(
-                        modifier = Modifier.weight(1f).padding(start = 24.dp),
+                        modifier = Modifier.weight(1f).padding(start = 16.dp),
                         value = unlockCountToday.toString(),
-                        label = "déblocages\naujourd'hui"
+                        label = "déblocages\nauj."
                     )
                 }
             }
