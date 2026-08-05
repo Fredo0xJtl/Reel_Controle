@@ -339,6 +339,37 @@ object InstagramUiDetector {
     }
 
     /**
+     * True si le lecteur plein écran affiche un Reels cliqué depuis le feed Accueil
+     * (tolérance de swipe comme DM).
+     *
+     * Heuristique : lecteur plein écran ouvert, mais pas sur l'onglet Reels dédié,
+     * pas en DM, et pas en contexte de Reels général (onglet sélectionné).
+     * Cela couvre : feed Accueil, Explorer, profil, hashtag, etc. — tous les contextes
+     * où cliquer un Reels unique ouvre le lecteur plein écran.
+     */
+    fun isReelViewerFromGeneralFeed(root: AccessibilityNodeInfo?): Boolean {
+        if (root == null) return false
+        return try {
+            // Si on est sur l'onglet Reels dédié, ce n'est pas un Reels du feed.
+            if (isGeneralReelsFeed(root)) {
+                Log.d(TAG, "Lecteur depuis feed : non, c'est l'onglet Reels sélectionné")
+                return false
+            }
+            // Si c'est un Reels DM, ce n'est pas un Reels du feed Accueil.
+            if (isReelViewerFromDirectMessage(root)) {
+                Log.d(TAG, "Lecteur depuis feed : non, c'est un Reels DM")
+                return false
+            }
+            // Lecteur plein écran + pas onglet dédié + pas DM = feed/Explorer/profil.
+            Log.d(TAG, "Lecteur depuis feed Accueil/Explorer/profil détecté")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Erreur détection feed Accueil du lecteur : ${e.message}")
+            false
+        }
+    }
+
+    /**
      * True si au moins un nœud portant [viewId] est réellement visible à l'écran.
      * Plusieurs nœuds peuvent partager l'identifiant (instances recyclées du lecteur) : il suffit
      * qu'une seule soit visible.

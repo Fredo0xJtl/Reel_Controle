@@ -110,7 +110,10 @@ class ReelsAccessibilityService : AccessibilityService() {
     /** Origine DM du lecteur actuellement ouvert, figée à l'ouverture (cf. [isBlockedReelsScreen]). */
     private var currentViewerIsDm = false
 
-    /** True une fois que [currentViewerIsDm] a été tranché pour l'ouverture en cours (cf. [isBlockedReelsScreen]). */
+    /** Origine feed Accueil du lecteur actuellement ouvert, figée à l'ouverture (cf. [isBlockedReelsScreen]). */
+    private var currentViewerIsFromFeed = false
+
+    /** True une fois que l'origine du lecteur a été tranché pour l'ouverture en cours (cf. [isBlockedReelsScreen]). */
     private var viewerOriginDecided = false
 
 
@@ -197,11 +200,18 @@ class ReelsAccessibilityService : AccessibilityService() {
         // déclenché par ces événements, le blocage restait alors en sommeil tout ce temps sur
         // l'onglet Reels dédié. Cette boucle republie un scan à intervalle fixe, avec le même
         // throttle ([SCAN_THROTTLE_MS]) qui protège déjà le chemin événementiel.
+        //
+        // Garde-fou (bug YouTube) : n'exécuter le scan que si Instagram a le focus. Sans ce
+        // filtrage, une fenêtre Instagram résiduelle en arrière-plan était trouvée par
+        // [findInstagramRoot], déclenchant une chaîne de vérification qui s'appliquait à l'app
+        // réellement au premier plan (écran noir sur YouTube).
         scope.launch(Dispatchers.Main) {
             while (true) {
                 delay(SCAN_THROTTLE_MS)
                 try {
-                    handleWindowUpdate()
+                    if (isInstagramForeground()) {
+                        handleWindowUpdate()
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Erreur pendant le scan périodique : ${e.message}")
                 }
@@ -271,6 +281,8 @@ class ReelsAccessibilityService : AccessibilityService() {
             consecutiveViewerDetections = 0
             wasViewerOpenLastScan = false
             viewerOriginDecided = false
+            currentViewerIsDm = false
+            currentViewerIsFromFeed = false
             return false
         }
         wasViewerOpenLastScan = true
@@ -283,30 +295,33 @@ class ReelsAccessibilityService : AccessibilityService() {
         consecutiveViewerDetections++
         if (consecutiveViewerDetections < VIEWER_DEBOUNCE_COUNT) return false
 
-        // Origine DM déterminée UNE SEULE FOIS par ouverture de lecteur, et seulement une fois le
+        // Origine déterminée UNE SEULE FOIS par ouverture de lecteur, et seulement une fois le
         // debounce ci-dessus atteint — pas dès la toute première passe. Bug constaté en test
-        // terrain : les marqueurs de partage DM ([DM_REEL_VIEWER_MARKER_IDS]) mettent quelques
-        // dizaines de ms de plus à se rendre que le conteneur du lecteur lui-même. Trancher
-        // l'origine sur la toute première passe capturait donc parfois un vrai Reels DM avant que
-        // ses marqueurs n'existent (→ classé à tort comme onglet dédié → fermé sans swipe), et
-        // symétriquement un onglet dédié pouvait hériter d'un marqueur DM résiduel encore affiché
-        // l'instant d'avant (→ classé à tort comme DM → blocage retardé, latence variable
-        // observée). Attendre le debounce laisse le temps aux marqueurs de se stabiliser.
+        // terrain : les marqueurs de partage DM mettent quelques dizaines de ms de plus à se
+        // rendre que le conteneur du lecteur lui-même. Trancher l'origine sur la toute première
+        // passe capturait donc parfois un vrai Reels DM avant que ses marqueurs n'existent.
+        // Attendre le debounce laisse le temps aux marqueurs de se stabiliser.
         if (!viewerOriginDecided) {
             currentViewerIsDm = InstagramUiDetector.isReelViewerFromDirectMessage(root)
+            currentViewerIsFromFeed = InstagramUiDetector.isReelViewerFromGeneralFeed(root)
             viewerOriginDecided = true
-            Log.d(TAG, "Origine du lecteur tranchée : ${if (currentViewerIsDm) "DM" else "non-DM (onglet/Explorer/profil)"}")
-            if (currentViewerIsDm) {
+            val origin = when {
+                currentViewerIsDm -> "DM"
+                currentViewerIsFromFeed -> "feed Accueil/Explorer/profil"
+                else -> "onglet Reels dédié"
+            }
+            Log.d(TAG, "Origine du lecteur tranchée : $origin")
+            if (currentViewerIsDm || currentViewerIsFromFeed) {
+                // DM et feed Accueil utilisent le même système de tolérance de swipes.
                 swipeTracker.onDmReelsOpened()
             } else {
-                // On n'est plus du tout sur un Reels DM (onglet dédié, Explorer, profil…) : purger
-                // tout résidu de tolérance pour ne pas laisser passer ces écrans sans blocage.
+                // Onglet Reels dédié : pas de tolérance, blocage immédiat. Purger tout résidu.
                 swipeTracker.reset()
             }
         }
 
-        if (currentViewerIsDm && swipeTracker.isWithinDmTolerance()) {
-            Log.d(TAG, "Reels DM dans la tolérance de swipes : pas de blocage")
+        if ((currentViewerIsDm || currentViewerIsFromFeed) && swipeTracker.isWithinDmTolerance()) {
+            Log.d(TAG, "Reels ${if (currentViewerIsDm) "DM" else "feed"} dans la tolérance de swipes : pas de blocage")
             return false
         }
 
