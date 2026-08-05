@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -98,13 +100,41 @@ fun HomeScreen(
 
     Scaffold(containerColor = colors.bg) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(20.dp, 20.dp, 20.dp, 0.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Text("Réel Contrôle", style = FocusReelsType.screenTitle, color = colors.text)
-                Text(versionLabel, style = FocusReelsType.mono, color = colors.sub)
+            Column(modifier = Modifier.fillMaxWidth().padding(20.dp, 20.dp, 20.dp, 0.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    // width(IntrinsicSize.Min) : la colonne se dimensionne exactement sur la
+                    // largeur du texte, pour que le filet ci-dessous (fillMaxWidth) épouse toute
+                    // la largeur du titre jusqu'au dernier caractère, pas une largeur arbitraire.
+                    Column(modifier = Modifier.width(IntrinsicSize.Min)) {
+                        Text(
+                            "RÉEL CONTRÔLE",
+                            // Police mono "signature" (cf. FocusReelsType.countdown/statNumber)
+                            // plutôt que le sans-serif générique du corps de texte : cohérent avec
+                            // le reste de l'identité brutaliste de l'app, effet "tampon"/technique
+                            // via l'espacement de lettres élargi.
+                            style = FocusReelsType.bodyTitle.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 22.sp,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = colors.text
+                        )
+                        // Filet brutaliste sous le titre, cohérent avec le reste de la palette
+                        // (pas d'accent orange ici — trop tranchant, cf. retour utilisateur).
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .background(colors.border)
+                        )
+                    }
+                    Text(versionLabel, style = FocusReelsType.mono, color = colors.sub)
+                }
             }
 
             // Bannière d'alerte : visible seulement si le blocage est censé être actif mais ne

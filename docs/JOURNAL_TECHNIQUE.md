@@ -216,9 +216,17 @@ Un cluster de ~160 lignes dans `InstagramUiDetector` — `isGeneralReelsFeed`, `
 
 ---
 
+## 16. Renommage et titre stylisé — 2026-08-05
+
+**Demande** : renommer l'app ("Réel Contrôle"), le nom du lanceur tronqué visuellement a ensuite été raccourci en "Réel Ctrl" (`app_name`), puis stylisation du titre de l'écran d'accueil (une première itération avec accent orange sur une partie du texte a été jugée trop tranchante avec le reste de la palette et retirée).
+
+**Résultat retenu** : titre en police monospace "signature" (au lieu du sans-serif générique), taille et espacement de lettres augmentés, filet décoratif sous le titre dimensionné exactement sur sa largeur via `Modifier.width(IntrinsicSize.Min)` plutôt qu'une largeur fixe arbitraire.
+
+---
+
 ## Bilan des versions
 
-V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → **v2.4.3** (fix debounce de fermeture du lecteur en stress test, validé terrain).
+V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → v2.4.3 (fix debounce de fermeture du lecteur en stress test, validé terrain) → **v2.4.4** (renommage "Réel Ctrl", titre d'accueil restylé).
 
 ## Compétences illustrées par ce projet
 

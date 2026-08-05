@@ -262,6 +262,15 @@ Synthèse ; diagnostic complet dans [docs/JOURNAL_TECHNIQUE.md](docs/JOURNAL_TEC
   préservée) ; une fermeture réelle sur 2 passes (~60ms) réinitialise l'origine, y compris
   pendant une chaîne de redirection active. Validé terrain.
 
+## v2.4.4 — Renommage et titre stylisé (2026-08-05)
+
+- Nom affiché de l'app (`app_name`) changé en "Réel Ctrl" pour tenir sous l'icône du lanceur
+  sans troncature ; le titre de l'écran d'accueil reste "Réel Contrôle" en toutes lettres.
+- Titre de l'écran d'accueil restylé : police monospace "signature" (déjà utilisée pour les
+  chiffres/compte à rebours) plutôt que le sans-serif générique, taille augmentée, espacement
+  de lettres élargi, filet décoratif sous le titre calé sur sa largeur exacte
+  (`Modifier.width(IntrinsicSize.Min)`).
+
 ## V1.0-beta — Version initiale
 
 Voir [DEPLOYMENT.md](DEPLOYMENT.md) et [README.md](README.md) pour l'état des lieux avant
