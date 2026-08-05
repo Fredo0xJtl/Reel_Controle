@@ -385,8 +385,8 @@ class ReelsAccessibilityService : AccessibilityService() {
      * Capture l'intention explicite de l'utilisateur d'ouvrir l'onglet Reels dédié, via le clic
      * lui-même plutôt qu'un état sondé après coup (cf. [reelsTabTappedAtUptimeMs]).
      *
-     * Remonte quelques niveaux de parenté (comme [InstagramUiDetector.isSelectedOrAncestorSelected]
-     * le fait déjà pour `isSelected`) : bug constaté en test terrain, retour utilisateur — le clic
+     * Remonte quelques niveaux de parenté (même principe que pour un flag `isSelected` porté par
+     * un ancêtre) : bug constaté en test terrain, retour utilisateur — le clic
      * n'était pas détecté à chaque tentative. `event.source` est le nœud PRÉCIS qui a reçu le
      * clic (souvent l'icône ou le libellé texte à l'intérieur du bouton d'onglet), pas
      * nécessairement le nœud porteur de l'identifiant `clips_tab`/`reels_tab` lui-même — sans
@@ -483,7 +483,7 @@ class ReelsAccessibilityService : AccessibilityService() {
      *
      * Centralisé et réutilisé à la fois par la détection initiale ([handleWindowUpdate]) et par
      * la vérification post-redirection ([performRedirectAndVerify]) : avant ce correctif, la
-     * vérification ne testait que [InstagramUiDetector.isGeneralReelsFeed] — un Reels ouvert
+     * vérification ne testait que l'ancien signal "onglet Reels sélectionné" — un Reels ouvert
      * depuis Explorer qui résistait au premier retour arrière n'était donc plus jamais re-détecté
      * ni retenté, la chaîne abandonnant après un seul essai (bypass constaté en test terrain avec
      * des clics répétés).

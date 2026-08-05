@@ -45,29 +45,13 @@ object InstagramUiDetector {
         "$PACKAGE:id/feed_tab"
     )
 
-    /** Libellés du bouton d'onglet Reels, selon la langue de l'appareil. */
-    private val REELS_TAB_LABELS = listOf("Reels", "Clips")
-
-    /**
-     * Marqueurs d'une conversation privée (§3.2). Identifiants recalibrés via dump terrain
-     * (les précédents — direct_thread_reel_viewer, direct_thread_toggle, thread_message_list —
-     * n'existent pas dans cette version d'Instagram, la détection DM ne matchait donc jamais).
-     * Ces nœuds restent présents dans l'arbre même quand le lecteur plein écran s'ouvre par-
-     * dessus (overlay, pas un nouvel écran) : la détection reste donc valable pendant tout le
-     * visionnage du Reels reçu en DM, pas seulement avant de l'ouvrir.
-     */
-    private val DM_VIEW_IDS = listOf(
-        "$PACKAGE:id/direct_thread_header",
-        "$PACKAGE:id/direct_thread_content_below_action_bar"
-    )
-
     /**
      * Barre de titre du lecteur Reels plein écran (constat empirique, test terrain, dump
      * diagnostic) : présente que le Reels soit ouvert depuis l'onglet Reels dédié (texte
      * "Reels"), depuis la grille Explorer/Recherche (texte "Explorer"), un profil, un hashtag,
      * etc. — le lecteur plein écran est le même composant partout, seul le titre change selon
      * l'origine. Contrairement à l'ancienne approche abandonnée (détection de `clips_viewer_*`
-     * en général, cf. [isGeneralReelsFeed]), cette barre de titre n'apparaît que dans le lecteur
+     * en général, testant uniquement l'onglet Reels sélectionné), cette barre de titre n'apparaît que dans le lecteur
      * plein écran dédié, jamais sur une carte Reels intégrée au défilement normal du flux
      * Accueil — elle ne recrée donc pas le faux positif qui avait fait abandonner cette piste.
      */
@@ -100,168 +84,6 @@ object InstagramUiDetector {
     )
 
     /**
-     * Retourne true uniquement si le flux Reels général est **réellement affiché**.
-     *
-     * Signal unique et sans ambiguïté : le bouton d'onglet Reels de la barre de navigation
-     * est marqué `isSelected`. C'est la seule condition qui distingue de façon fiable « je
-     * suis dans la section Reels dédiée » de « un Reels s'affiche ailleurs ».
-     *
-     * Ancienne approche abandonnée (constat empirique, §4.5) : détecter la présence d'un
-     * conteneur de lecteur plein écran (`clips_viewer_*`) semblait plus robuste, mais
-     * Instagram insère désormais des Reels directement dans le flux Accueil, avec
-     * vraisemblablement le même rendu de lecteur. Cette détection bloquait donc le simple
-     * défilement du feed normal. Se fier uniquement à l'onglet sélectionné élimine ce faux
-     * positif, au prix de ne pas intercepter un Reels isolé ouvert autrement (profil, feed) —
-     * acceptable au regard du cahier des charges, qui vise l'onglet Reels dédié (§3.1).
-     *
-     * La simple présence du libellé « Reels » n'est **jamais** suffisante : le bouton de
-     * navigation est affiché sur tous les écrans d'Instagram.
-     *
-     * Fail-open : toute exception ou incertitude renvoie false (pas de blocage).
-     *
-     * Garde supplémentaire (constat empirique, test terrain) : le fallback par libellé de
-     * [isReelsTabSelected] peut capter un badge « Reels » intégré dans une carte du flux
-     * Accueil (Instagram y insère des Reels directement) et le lire à tort comme sélectionné.
-     * Résultat observé : après redirection vers Accueil, la détection restait bloquée sur
-     * « Reels sélectionné » en boucle, provoquant des reclics incessants et un rafraîchissement
-     * continu du feed Accueil. L'onglet Reels et l'onglet Accueil sont mutuellement exclusifs
-     * dans l'UI réelle : si l'onglet Accueil est déjà sélectionné, on ne peut pas être
-     * simultanément sur le flux Reels général — on considère alors la détection Reels comme un
-     * faux positif et on l'ignore.
-     */
-    fun isGeneralReelsFeed(root: AccessibilityNodeInfo?): Boolean {
-        if (root == null) return false
-        return try {
-            if (isReelsTabSelected(root)) {
-                if (isHomeTabSelected(root)) {
-                    Log.w(TAG, "Faux positif ignoré : Reels ET Accueil détectés sélectionnés simultanément")
-                    return false
-                }
-                // Constat terrain (Galaxy S24) : une fois l'onglet Reels tapé une première fois,
-                // son flag isSelected reste bloqué à true même après avoir quitté l'écran — tout
-                // écran suivant (DM, etc.) était alors à tort détecté comme "Reels sélectionné" et
-                // redirigé. Les marqueurs DM restent fiables (cf. [DM_VIEW_IDS]) : leur présence
-                // écarte ce faux positif exactement comme pour l'onglet Accueil.
-                if (isReelsOpenedFromDirectMessage(root)) {
-                    Log.w(TAG, "Faux positif ignoré : onglet Reels bloqué sur sélectionné alors qu'on est en DM")
-                    return false
-                }
-                Log.d(TAG, "Reels général détecté : onglet Reels sélectionné")
-                return true
-            }
-
-            Log.v(TAG, "Reels général non détecté (autre écran Instagram)")
-            false
-        } catch (e: Exception) {
-            Log.w(TAG, "Erreur lors de la détection : ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Vérifie que l'onglet Accueil est déjà l'onglet actif (§4.5, correctif rafraîchissement).
-     *
-     * Utilisé pour éviter de recliquer sur l'onglet Accueil pendant la vérification post-
-     * redirection : un second tap sur un onglet **déjà sélectionné** est interprété par
-     * Instagram comme une demande de rafraîchissement/retour en haut du flux, ce qui provoquait
-     * un refresh visible du feed Accueil après chaque blocage.
-     */
-    fun isHomeTabSelected(root: AccessibilityNodeInfo?): Boolean {
-        if (root == null) return false
-        return try {
-            val node = findFirstByAnyViewId(root, HOME_TAB_VIEW_IDS) ?: return false
-            val selected = isSelectedOrAncestorSelected(node)
-            @Suppress("DEPRECATION")
-            node.recycle()
-            selected
-        } catch (e: Exception) {
-            Log.w(TAG, "Erreur détection onglet Accueil sélectionné : ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Vérifie que le bouton d'onglet Reels est l'onglet actif.
-     * Cherche d'abord par identifiant de vue, puis par libellé, et remonte au parent
-     * cliquable si le nœud porteur du texte n'est pas lui-même l'élément sélectionnable.
-     *
-     * Garde de visibilité (bug constaté en test terrain, Galaxy S24) : quand le lecteur plein
-     * écran s'ouvre par-dessus, Instagram masque la barre de navigation inférieure, mais son
-     * bouton Reels reste présent dans l'arbre d'accessibilité avec son flag `isSelected` figé à
-     * sa dernière valeur connue (dès qu'on a tapé une fois sur l'onglet Reels dédié, ce flag ne
-     * redevient jamais `false`). Sans ce filtre, tout Reels ouvert plus tard depuis le feed
-     * Accueil héritait à tort de ce flag « collé », classé comme onglet Reels dédié et fermé
-     * immédiatement — alors qu'aucun swipe n'avait eu lieu. Un onglet réellement actif est
-     * toujours visible à l'écran ; un nœud invisible ne peut porter qu'un état obsolète.
-     */
-    private fun isReelsTabSelected(root: AccessibilityNodeInfo): Boolean {
-        findFirstByAnyViewId(root, REELS_TAB_VIEW_IDS)?.let { node ->
-            val visible = node.isVisibleToUser
-            val selected = isSelectedOrAncestorSelected(node)
-            node.recycle()
-            if (visible && selected) return true
-        }
-
-        REELS_TAB_LABELS.forEach { label ->
-            val matches = try {
-                root.findAccessibilityNodeInfosByText(label)
-            } catch (_: Exception) {
-                emptyList<AccessibilityNodeInfo>()
-            }
-            // `firstOrNull` équivalent manuel : on doit recycler *tous* les nœuds de `matches`,
-            // y compris ceux qui suivent le premier trouvé sélectionné (le `return true` anticipé
-            // les laissait fuiter auparavant).
-            var found = false
-            matches.forEach { node ->
-                if (!found) {
-                    // Un libellé exact évite de capter « Reels et vidéos », « Voir les Reels », etc.
-                    val exactLabel = node.contentDescription?.toString()?.equals(label, ignoreCase = true) == true ||
-                            node.text?.toString()?.equals(label, ignoreCase = true) == true
-                    if (exactLabel && node.isVisibleToUser && isSelectedOrAncestorSelected(node)) {
-                        found = true
-                    }
-                }
-                @Suppress("DEPRECATION")
-                node.recycle()
-            }
-            if (found) return true
-        }
-        return false
-    }
-
-    /**
-     * L'état sélectionné est porté tantôt par le nœud lui-même, tantôt par son conteneur
-     * cliquable. On remonte donc quelques niveaux, sans parcourir tout l'arbre.
-     */
-    private fun isSelectedOrAncestorSelected(node: AccessibilityNodeInfo, maxDepth: Int = 3): Boolean {
-        var current: AccessibilityNodeInfo? = node
-        var depth = 0
-        var ownsCurrent = false
-        while (current != null && depth <= maxDepth) {
-            if (current.isSelected) {
-                if (ownsCurrent) {
-                    @Suppress("DEPRECATION")
-                    current.recycle()
-                }
-                return true
-            }
-            val parent = current.parent
-            if (ownsCurrent) {
-                @Suppress("DEPRECATION")
-                current.recycle()
-            }
-            current = parent
-            ownsCurrent = true
-            depth++
-        }
-        if (ownsCurrent && current != null) {
-            @Suppress("DEPRECATION")
-            current.recycle()
-        }
-        return false
-    }
-
-    /**
      * Retourne le nœud cliquable de l'onglet Accueil, s'il est présent à l'écran.
      * L'appelant est responsable de son cycle de vie (clic puis `recycle()`).
      */
@@ -276,37 +98,12 @@ object InstagramUiDetector {
     }
 
     /**
-     * Heuristique pour détecter un Reels ouvert depuis une conversation privée (DM) plutôt
-     * que depuis le flux Reels général (§3.2).
-     *
-     * N'utilise que des identifiants propres au contexte DM : rechercher le texte
-     * « Message » captait auparavant presque tous les écrans d'Instagram.
-     */
-    fun isReelsOpenedFromDirectMessage(root: AccessibilityNodeInfo?): Boolean {
-        if (root == null) return false
-        return try {
-            val node = findFirstByAnyViewId(root, DM_VIEW_IDS)
-            val isDmContext = node != null
-            @Suppress("DEPRECATION")
-            node?.recycle()
-
-            if (isDmContext) {
-                Log.d(TAG, "Reels depuis DM détecté")
-            }
-            isDmContext
-        } catch (e: Exception) {
-            Log.w(TAG, "Erreur détection DM : ${e.message}")
-            false
-        }
-    }
-
-    /**
      * Détecte le lecteur Reels plein écran peu importe son origine (Explorer, profil, hashtag…) —
      * pas seulement l'onglet Reels dédié. Corrige un contournement constaté (test terrain) : un
-     * Reels ouvert depuis la grille Recherche/Explorer n'était pas détecté ([isGeneralReelsFeed]
-     * ne teste que l'onglet Reels sélectionné), laissant l'utilisateur défiler indéfiniment.
+     * Reels ouvert depuis la grille Recherche/Explorer n'était pas détecté, laissant l'utilisateur
+     * défiler indéfiniment.
      *
-     * L'appelant doit exclure au préalable le contexte DM ([isReelsOpenedFromDirectMessage]) et
+     * L'appelant doit exclure au préalable le contexte DM ([isReelViewerFromDirectMessage]) et
      * sa fenêtre de tolérance ([com.focusreels.app.domain.SwipeSessionTracker.isWithinDmTolerance])
      * pour ne pas casser la tolérance de swipes voulue sur les Reels reçus en DM, qui utilisent
      * le même composant de lecteur.
@@ -344,37 +141,6 @@ object InstagramUiDetector {
             DM_REEL_VIEWER_MARKER_IDS.any { id -> isAnyNodeVisible(root, id) }
         } catch (e: Exception) {
             Log.w(TAG, "Erreur détection origine DM du lecteur : ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * True si le lecteur plein écran affiche un Reels cliqué depuis le feed Accueil
-     * (tolérance de swipe comme DM).
-     *
-     * Heuristique : lecteur plein écran ouvert, mais pas sur l'onglet Reels dédié,
-     * pas en DM, et pas en contexte de Reels général (onglet sélectionné).
-     * Cela couvre : feed Accueil, Explorer, profil, hashtag, etc. — tous les contextes
-     * où cliquer un Reels unique ouvre le lecteur plein écran.
-     */
-    fun isReelViewerFromGeneralFeed(root: AccessibilityNodeInfo?): Boolean {
-        if (root == null) return false
-        return try {
-            // Si on est sur l'onglet Reels dédié, ce n'est pas un Reels du feed.
-            if (isGeneralReelsFeed(root)) {
-                Log.d(TAG, "Lecteur depuis feed : non, c'est l'onglet Reels sélectionné")
-                return false
-            }
-            // Si c'est un Reels DM, ce n'est pas un Reels du feed Accueil.
-            if (isReelViewerFromDirectMessage(root)) {
-                Log.d(TAG, "Lecteur depuis feed : non, c'est un Reels DM")
-                return false
-            }
-            // Lecteur plein écran + pas onglet dédié + pas DM = feed/Explorer/profil.
-            Log.d(TAG, "Lecteur depuis feed Accueil/Explorer/profil détecté")
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "Erreur détection feed Accueil du lecteur : ${e.message}")
             false
         }
     }

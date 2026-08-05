@@ -127,9 +127,78 @@ Vérification systématique demandée avant la phase de design visuel : aucune p
 
 ---
 
+## 9. Écran noir sur YouTube et détection cassée par cycles activer/désactiver — 2026-08-05
+
+**Symptôme 1** : "ça me fait toujours cet écran noir quand je veux aller sur YouTube pendant que l'app est activée." Le scan périodique (§7) retrouvait une fenêtre Instagram résiduelle en arrière-plan via le balayage multi-fenêtre et déclenchait un retour arrière qui s'appliquait en réalité à YouTube au premier plan.
+
+**Solution** : garde `isInstagramForeground()` (fenêtre ayant réellement le focus système) avant tout scan périodique et avant tout retour arrière, distincte de `findInstagramRoot()` (balayage multi-fenêtre, utile pour la détection/le mute mais jamais pour une action).
+
+**Symptôme 2** : "j'ai essayé de faire un stress test en activant/désactivant plusieurs fois le blocage et ça a fini par faire buguer le truc." Après plusieurs cycles, le blocage restait activé en apparence mais n'avait plus aucun effet.
+
+**Cause** : les flags d'état (`redirectChainActive`, `viewerOriginDecided`, `swipeTracker`, horodatages…) n'étaient jamais réinitialisés à la reconnexion du service, seulement à la création de l'instance.
+
+**Solution** : reset complet de tous les flags dans `onServiceConnected()`.
+
+---
+
+## 10. Distinguer Reels du feed et onglet Reels dédié — 2026-08-05
+
+**Besoin exprimé** : "quand je clique sur un réel dans le feed, que ça le met en plein écran, tu me laisses le lire, mais si je scroll, là tu bloques" — un Reel ouvert depuis le feed Accueil doit bénéficier de la même tolérance de swipe qu'un Reels DM ; l'onglet Reels dédié doit rester bloqué immédiatement, son coupé.
+
+Cinq bugs successifs découverts par tests répétés avec capture logcat en direct, chacun corrigeant une hypothèse insuffisante de la précédente :
+
+1. **Reel du feed fermé sans swipe** : le compteur de swipes n'était remis à zéro qu'à la détection de l'onglet dédié, jamais à la fermeture normale d'un lecteur — carry-over du compteur entre deux ouvertures successives.
+2. **Toujours fermé** : le flag `isSelected` du bouton Reels restait collé à `true` même une fois la barre de navigation masquée par le lecteur plein écran (`isVisibleToUser` ne détecte pas l'occlusion en z-order).
+3. **Toujours fermé** : un snapshot de `isSelected` pris juste avant l'ouverture du lecteur arrivait parfois trop tard (le lecteur pouvait s'ouvrir avant le scan suivant).
+4. **Décision racine** : abandon complet du flag `isSelected`, jugé structurellement non fiable (scintille, reste collé après avoir quitté l'onglet, contredit lui-même selon le moment de lecture). Remplacé par la détection du **clic explicite** (`TYPE_VIEW_CLICKED`) sur le bouton d'onglet Reels, seul signal représentant une intention utilisateur réelle. Par défaut sans clic récent détecté : classement "feed" (le choix le plus sûr — une tolérance accordée à tort est bien moins gênante qu'un Reel du feed fermé sans swipe).
+5. **Faux positifs de clic synthétique** : Instagram émet parfois un `TYPE_VIEW_CLICKED` avec l'ID exact du bouton Reels **sans tap utilisateur réel** (mise à jour interne de sélection, observée ~56 ms après l'ouverture d'un Reel du feed). Filtre ajouté : un tap réel ne peut provenir que de la zone de la barre de navigation inférieure (~15 % bas de l'écran).
+
+**Bug de settling résiduel** : même après ces corrections, un Reel du feed ouvert sans le moindre swipe se fermait parfois quand même — l'animation d'ouverture du pager Instagram émettait à elle seule un `TYPE_VIEW_SCROLLED` (~100–200 ms après ouverture), consommant à tort le quota de tolérance (fixé à 1 swipe). **Solution** : fenêtre de grâce de 700 ms après la première détection du lecteur, pendant laquelle les scrolls sont ignorés.
+
+**Bug écran fractionné (split-screen)** : "j'avais YouTube ouvert en fenêtré, ça désordonnait l'analyse d'Insta." Le filtre de position du clic (point 5 ci-dessus) comparait la position du tap à `resources.displayMetrics.heightPixels` — la hauteur de l'écran physique entier, pas celle de la fenêtre Instagram. En écran fractionné, Instagram n'occupe qu'une partie de l'écran : sa vraie barre de nav ne tombait donc jamais dans la zone calculée sur l'appareil entier, cassant la détection de clic. **Solution** : mesure de la hauteur réelle de la fenêtre Instagram (`findInstagramRoot().getBoundsInScreen()`), avec repli sur l'écran entier si indisponible.
+
+---
+
+## 11. Historique visuel et optimisation de la latence de blocage — 2026-08-05
+
+**Demande** : remplacer la liste texte de l'historique par un graphique en barres (jours ou mois au choix, nombre de blocages en ordonnée), cliquable pour afficher le détail d'une période sans dérouler tout l'historique.
+
+**Implémentation** : graphique dessiné en `Canvas` Compose (pas de librairie externe, cohérence offline-first), avec `detectTapGestures` pour la sélection de barre. Chaque barre porte directement ses tentatives plutôt qu'un simple compteur, évitant une requête supplémentaire au clic.
+
+**Latence de blocage jugée trop longue et irrégulière** : "je voudrais vraiment que tu diminues ça le plus possible, et que tous les clics restent ce même temps." Cause : `BLOCK_COOLDOWN_MS` (1500 ms) empêchait toute nouvelle redirection dans les 1,5 s suivant la précédente, même pour un clic volontaire de test — le Reel restait visible jusqu'à expiration du cooldown. Réduit à 400 ms. `VERIFY_DELAY_MS` (délai entre chaque tentative de retour arrière en cas d'échec) réduit de 800 à 300 ms.
+
+---
+
+## 12. Audit pré-release général et stress test — 2026-08-05
+
+**Demande** : "fais-moi un stress test général avec une recherche de bugs et de failles et corrige tout ce que tu peux avant release."
+
+**Protocole** : 10 cycles activer/désactiver du service d'accessibilité via ADB, mesures CPU/mémoire/threads sur appareil réel avant/après, recherche systématique de fuites dans le code de gestion des `AccessibilityNodeInfo` (API nécessitant un recyclage manuel explicite).
+
+**9 problèmes trouvés et corrigés**, aucune régression fonctionnelle détectée :
+
+- **3 fuites de nœuds d'accessibilité** : `handleScroll` ne recyclait la racine sur aucune de ses deux sorties anticipées (une fuite par scroll, plusieurs par seconde) ; `isInstagramForeground` et `findInstagramRoot` allouaient des nœuds jamais libérés à chaque appel, l'un dans la boucle de scan, l'autre à chaque retour arrière.
+- **Boucles cumulatives** : `onServiceConnected` peut être rappelé par le système sans passage préalable par `onUnbind` (reconnexion du service, changement de configuration) — chaque reconnexion empilait une boucle de scan et un collecteur de Flow supplémentaires, doublant la charge à chaque cycle. C'est très probablement la cause racine du bug de stress test du §9. Correction : annulation explicite des coroutines en tout début de méthode.
+- **Son bloqué à 0 de façon permanente** si le service s'arrêtait pendant une coupure (désactivation manuelle, kill système) : aucun code ne restaurait le volume dans ce cas. Restauration ajoutée dans `onUnbind`/`onDestroy`, plus un bug d'ordre d'appel où `unmuteMediaAudio()` était invoqué après la purge de sa propre variable de sauvegarde (donc sans effet).
+- **`swipeTracker` non `@Volatile`** malgré une réassignation sur un thread et une lecture depuis un autre.
+- **Scan périodique à cadence fixe (~33 sondages/seconde) en permanence**, y compris blocage désactivé ou Instagram fermé — chaque sondage appelle `rootInActiveWindow`, un IPC système non gratuit. Passage à une cadence adaptative : 30 ms uniquement quand le blocage est actif ET Instagram au premier plan, 500 ms sinon. Mesuré sur appareil : 109 ticks CPU/5 s en usage contre 9 au repos (−92 %).
+- **Garde-fou anti-boucle infinie recalibré** : la limite de tentatives (160) avait été dimensionnée pour l'ancien délai de vérification de 800 ms (~2 min de marge) ; la réduction à 300 ms (§11) l'avait silencieusement ramenée à ~48 s sans que ce soit voulu. Remontée à 400 pour rétablir la marge d'origine.
+
+**Résultats mesurés** : 10 cycles → 10 connexions propres, 0 crash, 0 exception, mémoire stable (42 → 45 MB), aucune boucle empilée.
+
+---
+
+## 13. Suppression du code mort — 2026-08-05
+
+**Demande** : "suppr tous le code mort si tu es sûr qu'il est inutile."
+
+Un cluster de ~160 lignes dans `InstagramUiDetector` — `isGeneralReelsFeed`, `isHomeTabSelected`, `isReelsTabSelected`, `isReelsOpenedFromDirectMessage`, `isReelViewerFromGeneralFeed`, `isSelectedOrAncestorSelected`, et les constantes `DM_VIEW_IDS`/`REELS_TAB_LABELS` qui n'étaient plus lues que par ce cluster — reposait entièrement sur l'ancienne approche par flag `isSelected`, abandonnée au §10 (point 4) au profit de la détection par clic. Ces fonctions n'avaient plus aucun appelant en dehors d'elles-mêmes depuis ce changement, mais étaient restées dans le fichier. Vérifié par recherche exhaustive des usages avant suppression ; compilation et suite de tests toujours vertes après coup, zéro warning résiduel.
+
+---
+
 ## Bilan des versions
 
-V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → **v2.3** (stable, dernière version validée terrain avant la phase design UI).
+V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → **v2.4.1** (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort).
 
 ## Compétences illustrées par ce projet
 
