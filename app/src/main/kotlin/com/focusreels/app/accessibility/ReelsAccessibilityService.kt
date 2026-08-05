@@ -125,6 +125,26 @@ class ReelsAccessibilityService : AccessibilityService() {
         private const val REELS_TAB_TAP_VALIDITY_MS = 2_000L
 
         /**
+         * Délai maximal, une fois revenu sur un écran SANS lecteur plein écran ouvert, pendant
+         * lequel un clic détecté sur l'onglet Reels dédié ([reelsTabTappedAtUptimeMs]) est encore
+         * considéré comme "en train de faire ouvrir un lecteur". Nettement plus court que
+         * [REELS_TAB_TAP_VALIDITY_MS] : le lecteur s'ouvre en pratique en quelques dizaines de ms
+         * après le tap, donc s'il n'est toujours pas ouvert passé ce délai, le tap n'a mené à
+         * aucune ouverture (déjà bloqué et refermé, tap ignoré par Instagram, etc.) et doit être
+         * purgé immédiatement plutôt que de rester "récent" jusqu'à expiration complète de
+         * [REELS_TAB_TAP_VALIDITY_MS].
+         *
+         * Bug constaté en test terrain, retour utilisateur : après plusieurs taps rapprochés sur
+         * l'onglet Reels dédié (chacun renvoyant à Accueil), un Reel ouvert depuis le feed dans la
+         * foulée était classé à tort "onglet dédié" à cause d'un tap résiduel non consommé (aucun
+         * lecteur ne s'était jamais ouvert pour ce tap précis) — fermé instantanément sans
+         * tolérance de swipe. Un second tap sur le Reel du feed, une fois ce résidu expiré,
+         * fonctionnait normalement, d'où l'impression qu'il fallait "re-cliquer" pour que ça reste
+         * ouvert.
+         */
+        private const val REELS_TAB_TAP_STALE_AT_HOME_MS = 400L
+
+        /**
          * Fenêtre de grâce après la toute première détection du lecteur plein écran
          * ([viewerOpenedAtUptimeMs]) pendant laquelle les TYPE_VIEW_SCROLLED sont ignorés. Bug
          * constaté en test terrain : ouvrir un Reel du feed déclenche à lui seul un
@@ -514,6 +534,18 @@ class ReelsAccessibilityService : AccessibilityService() {
         if (!InstagramUiDetector.isImmersiveReelsViewerOpen(root)) {
             consecutiveViewerDetections = 0
             wasViewerOpenLastScan = false
+
+            // Purge du tap résiduel (cf. [REELS_TAB_TAP_STALE_AT_HOME_MS]) : indépendant de
+            // `redirectChainActive`, contrairement au bloc ci-dessous — un tap déjà consommé par
+            // une décision d'origine (ligne ~601) ou qui n'a jamais mené à l'ouverture d'un
+            // lecteur ne doit pas rester "récent" pendant toute la durée de
+            // [REELS_TAB_TAP_VALIDITY_MS] et fausser la classification du PROCHAIN lecteur
+            // (potentiellement ouvert depuis le feed) qui apparaîtrait pendant cette fenêtre.
+            if (reelsTabTappedAtUptimeMs != 0L &&
+                SystemClock.uptimeMillis() - reelsTabTappedAtUptimeMs > REELS_TAB_TAP_STALE_AT_HOME_MS
+            ) {
+                reelsTabTappedAtUptimeMs = 0L
+            }
 
             // Ne PAS réinitialiser l'origine déjà tranchée (viewerOriginDecided / currentViewerIsDm
             // / currentViewerIsFromFeed / swipeTracker) tant qu'une chaîne de redirection est en
