@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.focusreels.app.data.db.BlockAttemptEntity
+import com.focusreels.app.data.db.UnlockEventEntity
 import com.focusreels.app.data.repository.HistoryRepository
 import com.focusreels.app.ui.theme.BottomNav
 import com.focusreels.app.ui.theme.FocusReelsType
@@ -52,6 +53,23 @@ import java.util.Locale
 private enum class ChartGranularity(val label: String) {
     DAY("Jour"),
     MONTH("Mois")
+}
+
+/** Type d'événement affiché dans l'historique. */
+private enum class HistoryType(val label: String) {
+    BLOCKED("Bloqués"),
+    UNLOCKED("Déblocages")
+}
+
+/** Événement d'historique polymorphe (bloqué ou débloqué). */
+private sealed class HistoryEvent {
+    abstract val timestampMillis: Long
+    data class Blocked(val attempt: BlockAttemptEntity) : HistoryEvent() {
+        override val timestampMillis = attempt.timestampMillis
+    }
+    data class Unlocked(val event: UnlockEventEntity) : HistoryEvent() {
+        override val timestampMillis = event.timestampMillis
+    }
 }
 
 /**
@@ -76,22 +94,37 @@ fun HistoryScreen(
     // `remember(packageName)` : sans clé, `observeHistory()` construirait un nouveau Flow (donc
     // une nouvelle souscription Room) à chaque recomposition de l'écran.
     val historyFlow = remember(packageName) { repository.observeHistory(packageName) }
-    val fullHistory by historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val blockedHistory by historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    val unlockFlow = remember(packageName) { repository.observeUnlockHistory(packageName) }
+    val unlockedHistory by unlockFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.FRANCE) }
 
+    var historyType by remember { mutableStateOf(HistoryType.BLOCKED) }
     var chartGranularity by remember { mutableStateOf(ChartGranularity.DAY) }
     // Index de la barre sélectionnée dans [chartBars], ou -1 si aucune. Réinitialisé quand la
     // granularité change (index #13 en vue "Jour" n'a pas de sens en vue "Mois").
     var selectedBarIndex by remember { mutableStateOf(-1) }
 
+    val fullHistory = when (historyType) {
+        HistoryType.BLOCKED -> blockedHistory
+        HistoryType.UNLOCKED -> unlockedHistory
+    }
+
     // Points du graphique : sur l'historique complet, sur une fenêtre glissante récente adaptée
-    // à la granularité choisie. Chaque barre porte directement ses tentatives (plutôt qu'un
+    // à la granularité choisie. Chaque barre porte directement ses événements (plutôt qu'un
     // simple compte) : le tap sur une barre affiche son détail sans nouvelle requête.
     val chartBars = remember(fullHistory, chartGranularity) {
+        val historyEvents = when (historyType) {
+            HistoryType.BLOCKED -> blockedHistory.map { HistoryEvent.Blocked(it) }
+            HistoryType.UNLOCKED -> unlockedHistory.map { HistoryEvent.Unlocked(it) }
+        }
+
         when (chartGranularity) {
             ChartGranularity.DAY -> {
                 val today = LocalDate.now(ZoneId.systemDefault())
-                val byDay = fullHistory.groupBy {
+                val byDay = historyEvents.groupBy {
                     Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault()).toLocalDate()
                 }
                 val days = (13 downTo 0).map { today.minusDays(it.toLong()) }
@@ -104,13 +137,13 @@ fun HistoryScreen(
                     ChartBar(
                         label = day.format(java.time.format.DateTimeFormatter.ofPattern("d/M")),
                         detailLabel = dayLabel,
-                        attempts = (byDay[day] ?: emptyList()).sortedByDescending { it.timestampMillis }
+                        events = (byDay[day] ?: emptyList()).sortedByDescending { it.timestampMillis }
                     )
                 }
             }
             ChartGranularity.MONTH -> {
                 val currentMonth = YearMonth.now(ZoneId.systemDefault())
-                val byMonth = fullHistory.groupBy {
+                val byMonth = historyEvents.groupBy {
                     YearMonth.from(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault()))
                 }
                 val months = (11 downTo 0).map { currentMonth.minusMonths(it.toLong()) }
@@ -121,7 +154,7 @@ fun HistoryScreen(
                         label = month.month.getDisplayName(JTextStyle.SHORT, Locale.FRANCE)
                             .replaceFirstChar { it.uppercase() },
                         detailLabel = "$monthName ${month.year}",
-                        attempts = (byMonth[month] ?: emptyList()).sortedByDescending { it.timestampMillis }
+                        events = (byMonth[month] ?: emptyList()).sortedByDescending { it.timestampMillis }
                     )
                 }
             }
@@ -140,6 +173,22 @@ fun HistoryScreen(
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HistoryType.entries.forEach { type ->
+                    FilterPill(
+                        label = type.label,
+                        selected = historyType == type,
+                        onClick = {
+                            historyType = type
+                            selectedBarIndex = -1
+                        }
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ChartGranularity.entries.forEach { granularity ->
@@ -170,6 +219,19 @@ fun HistoryScreen(
 
             Box(modifier = Modifier.padding(top = 4.dp))
 
+            val emptyText = when (historyType) {
+                HistoryType.BLOCKED -> "Aucune tentative bloquée pour l'instant."
+                HistoryType.UNLOCKED -> "Aucun déblocage pour l'instant."
+            }
+            val noDataText = when (historyType) {
+                HistoryType.BLOCKED -> "Aucun blocage : "
+                HistoryType.UNLOCKED -> "Aucun déblocage : "
+            }
+            val eventText = when (historyType) {
+                HistoryType.BLOCKED -> "Tentative bloquée"
+                HistoryType.UNLOCKED -> "Déblocage"
+            }
+
             if (selectedBar == null) {
                 Column(
                     modifier = Modifier.fillMaxWidth().weight(1f),
@@ -177,18 +239,18 @@ fun HistoryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        if (fullHistory.isEmpty()) "Aucune tentative bloquée pour l'instant." else "Touchez une barre pour voir le détail.",
+                        if (fullHistory.isEmpty()) emptyText else "Touchez une barre pour voir le détail.",
                         color = colors.sub,
                         fontSize = 14.sp
                     )
                 }
-            } else if (selectedBar.attempts.isEmpty()) {
+            } else if (selectedBar.events.isEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Aucun blocage : ${selectedBar.detailLabel}", color = colors.sub, fontSize = 14.sp)
+                    Text("$noDataText${selectedBar.detailLabel}", color = colors.sub, fontSize = 14.sp)
                 }
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
@@ -206,10 +268,10 @@ fun HistoryScreen(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text(selectedBar.attempts.size.toString(), style = FocusReelsType.mono, color = colors.surface)
+                            Text(selectedBar.events.size.toString(), style = FocusReelsType.mono, color = colors.surface)
                         }
                     }
-                    items(selectedBar.attempts) { attempt ->
+                    items(selectedBar.events) { event ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -217,11 +279,11 @@ fun HistoryScreen(
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Text(
-                                timeFormatter.format(Date(attempt.timestampMillis)),
+                                timeFormatter.format(Date(event.timestampMillis)),
                                 style = FocusReelsType.mono,
                                 color = colors.sub
                             )
-                            Text("Tentative bloquée", color = colors.text, fontSize = 14.sp)
+                            Text(eventText, color = colors.text, fontSize = 14.sp)
                         }
                     }
                 }
@@ -242,11 +304,11 @@ fun HistoryScreen(
 }
 
 /**
- * Un point du graphique d'historique : un jour ou un mois. Porte directement ses tentatives (pas
+ * Un point du graphique d'historique : un jour ou un mois. Porte directement ses événements (pas
  * juste un compte) pour que le tap sur la barre affiche son détail sans requête supplémentaire.
  */
-private data class ChartBar(val label: String, val detailLabel: String, val attempts: List<BlockAttemptEntity>) {
-    val count: Int get() = attempts.size
+private data class ChartBar(val label: String, val detailLabel: String, val events: List<HistoryEvent>) {
+    val count: Int get() = events.size
 }
 
 /**
