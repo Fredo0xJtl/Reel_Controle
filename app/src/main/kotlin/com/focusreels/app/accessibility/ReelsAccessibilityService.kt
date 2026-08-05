@@ -299,6 +299,14 @@ class ReelsAccessibilityService : AccessibilityService() {
             viewerOriginDecided = false
             currentViewerIsDm = false
             currentViewerIsFromFeed = false
+            // Bug constaté en test terrain : sans ce reset, swipeTracker.inDmReelsContext restait
+            // à true et swipeCount ne repartait jamais de zéro d'une ouverture de lecteur à
+            // l'autre (reset() n'était appelé que sur l'onglet Reels dédié). Un premier Reels DM
+            // ou feed consommait sa tolérance, puis le Reels SUIVANT héritait d'un compteur déjà
+            // dépassé et se fermait instantanément, sans le moindre swipe. Le lecteur qui se ferme
+            // (retour au feed/à la conversation) doit systématiquement repartir sur une tolérance
+            // neuve pour la prochaine ouverture.
+            swipeTracker.reset()
             return false
         }
         wasViewerOpenLastScan = true
