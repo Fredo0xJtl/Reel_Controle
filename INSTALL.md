@@ -52,6 +52,27 @@ Depuis le téléphone : ouvrir `Réel Contrôle` depuis le menu des apps.
 3. Activer le service.
 4. Accepter les permissions (pas d'accès réseau, juste accessibilité).
 
+### Xiaomi (HyperOS) : « Ce service ne fonctionne pas »
+
+Sur Xiaomi/HyperOS (constaté sur 15T Pro, Android 16), l'activation peut échouer avec le message
+générique **« Ce service ne fonctionne pas »**, même après avoir accepté l'avertissement. Ce
+n'est pas un bug de l'app mais une protection Android (renforcée par HyperOS) contre les apps
+installées hors Play Store (« Restricted settings », depuis Android 13). Procédure :
+
+1. **Paramètres → Applications → Réel Contrôle → (⋮) → Autoriser les restrictions**, ou
+   **Paramètres → Applications → Gérer les applications → Réel Contrôle**, puis chercher l'option
+   *« Ce paramètre est actuellement restreint »* et l'autoriser explicitement (le libellé exact
+   varie selon la version HyperOS).
+2. Si l'option n'apparaît pas directement dans le service d'accessibilité : désinstaller
+   entièrement l'app, la réinstaller, ouvrir l'app une fois, puis réessayer l'activation — le
+   verrou de restriction se lève parfois après un premier lancement complet.
+3. Activer **Autostart** : Paramètres → Applications → Réel Contrôle → Autostart → Activer
+   (distinct de l'optimisation batterie ci-dessous, spécifique à MIUI/HyperOS).
+4. Si le service se désactive tout seul après quelques minutes/heures : vérifier les logs
+   (`adb logcat -s ReelsAccessibilityService`) — un `Échec critique de l'initialisation` dans les
+   logs indique un crash à la connexion (base de données, permissions) plutôt qu'une restriction
+   OS ; dans ce cas, remonter le rapport avec le stacktrace complet.
+
 ### 4. Désactiver l'optimisation batterie
 
 #### Xiaomi (MIUI/HyperOS)

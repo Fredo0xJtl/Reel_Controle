@@ -11,6 +11,10 @@ object AccessibilityChecker {
             context.contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        return enabledServices.contains(ReelsAccessibilityService::class.java.simpleName)
+        // Comparaison par nom pleinement qualifié ("package/package.Classe", format standard de
+        // ENABLED_ACCESSIBILITY_SERVICES) plutôt que par simpleName seul : un simple `contains`
+        // sur le nom court risquait de matcher un service homonyme d'une autre application.
+        val qualifiedName = "${context.packageName}/${ReelsAccessibilityService::class.java.name}"
+        return enabledServices.split(':').any { it.equals(qualifiedName, ignoreCase = true) }
     }
 }

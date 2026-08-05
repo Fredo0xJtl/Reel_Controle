@@ -287,6 +287,20 @@ class ReelsAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
 
+        // Garde-fou global (Xiaomi HyperOS notamment) : une exception non rattrapée ici fait
+        // planter le process du service PENDANT sa connexion. Le système Android affiche alors,
+        // au retour sur l'écran Paramètres > Accessibilité, le message générique "Ce service ne
+        // fonctionne pas" — sans aucune trace exploitable pour l'utilisateur. Toute l'init est
+        // donc couverte : mieux vaut un service qui logue l'échec et retente au prochain cycle
+        // de connexion qu'un crash silencieux qui semble "cassé" sans explication.
+        try {
+            initService()
+        } catch (e: Exception) {
+            Log.e(TAG, "Échec critique de l'initialisation du service d'accessibilité", e)
+        }
+    }
+
+    private fun initService() {
         // Annule tout ce qui tournait encore d'une connexion précédente AVANT de relancer
         // (audit pré-release). `onServiceConnected` peut être rappelé sans `onUnbind` préalable
         // (reconnexion du service par le système, changement de configuration d'accessibilité) :
@@ -323,9 +337,18 @@ class ReelsAccessibilityService : AccessibilityService() {
         unmuteMediaAudio()
         savedMusicVolume = null
         scope.launch {
-            blockedAppRepository.observe(AppIds.INSTAGRAM).collect { entity ->
-                blockingEnabledCache = entity?.blockingEnabled == true
-                swipeTracker.toleratedSwipes = entity?.toleratedSwipesAfterDm ?: Defaults.TOLERATED_SWIPES_AFTER_DM
+            try {
+                blockedAppRepository.observe(AppIds.INSTAGRAM).collect { entity ->
+                    blockingEnabledCache = entity?.blockingEnabled == true
+                    swipeTracker.toleratedSwipes = entity?.toleratedSwipesAfterDm ?: Defaults.TOLERATED_SWIPES_AFTER_DM
+                }
+            } catch (e: Exception) {
+                // Ce collecteur tourne indéfiniment sur Dispatchers.Default : une exception non
+                // rattrapée ici (accès Room défaillant, ex. base corrompue après un changement de
+                // schéma) remonterait au SupervisorJob sans jamais crasher le service (isolation
+                // par enfant), mais couperait silencieusement la mise à jour de blockingEnabledCache
+                // — le blocage resterait figé sur son dernier état connu sans que rien ne l'indique.
+                Log.e(TAG, "Erreur dans le collecteur d'état du blocage (Room)", e)
             }
         }
 
