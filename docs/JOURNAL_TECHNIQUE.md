@@ -261,9 +261,37 @@ Un cluster de ~160 lignes dans `InstagramUiDetector` — `isGeneralReelsFeed`, `
 
 ---
 
+## 19. Robustesse service accessibilité — Xiaomi HyperOS / Android 16 — 2026-08-05
+
+**Demande** : signalement d'un blocage sur Xiaomi 15T Pro (Android 16, HyperOS) — le service d'accessibilité affiche « Ce service ne fonctionne pas » après acceptation de l'avertissement système, alors que tout fonctionne normalement sur Samsung (Galaxy S24, OneUI). Device Xiaomi non disponible pour test direct : analyse et corrections faites à l'aveugle côté code, à valider par la personne concernée.
+
+**Méthode imposée** : analyse complète d'abord (manifeste, service, config XML), rapport des causes classées par probabilité avec preuves code, corrections appliquées seulement après — pas de correctif au hasard sur un bug non reproductible localement.
+
+**Causes identifiées, par probabilité décroissante** :
+
+1. **« Restricted settings » (Android 13+)** — cause la plus probable, purement système. Toute app installée hors Play Store (notre cas : `adb install`) voit Android bloquer par défaut l'activation de paramètres sensibles comme AccessibilityService. Xiaomi/HyperOS renforce ce comportement. Aucune preuve dans le code (c'est un comportement OS), mais correspond exactement au symptôme décrit et au message générique observé. **Non résolvable par du code** : documenté dans `INSTALL.md` avec la procédure de déblocage manuel (Paramètres → Applications → Réel Contrôle → autoriser la restriction).
+
+2. **`isAccessibilityTool` absent** (`accessibility_service_config.xml`). Attribut recommandé depuis Android 14 pour les services d'accessibilité à usage "utilitaire" (pas assistance handicap classique) ; son absence peut ajouter de la friction/suspicion OEM à l'activation sur certaines ROM. Ajouté. Vérifié après coup sur le Galaxy S24 via `adb shell dumpsys accessibility` : le service apparaît désormais tagué `(A11yTool)` dans la sortie — confirmation que l'attribut est bien pris en compte par le framework, même si l'effet réel sur HyperOS reste à confirmer sur le device concerné.
+
+3. **`onServiceConnected` sans garde globale** (`ReelsAccessibilityService.kt`). Toute la logique d'initialisation (accès Room via `AppDatabase.getInstance`, cast `application as FocusReelsApplication`, lancement de coroutines) tournait sans aucun `try/catch` autour de l'ensemble. Une exception à ce stade fait planter le process du service pendant sa connexion — ce qui correspond précisément au message système observé, sans laisser la moindre trace exploitable. Corrigé : extraction du corps dans une méthode privée `initService()`, appelée depuis `onServiceConnected` sous un `try/catch` qui logue la stacktrace complète en cas d'échec (`Log.e` avec l'exception, pas seulement son message).
+
+4. **Collecteur de Flow non protégé**, à l'intérieur de `initService()` : `blockedAppRepository.observe(...).collect { ... }` tournait sans `try/catch` propre. Isolé par le `SupervisorJob` du scope (ne fait pas planter le service), mais une erreur Room y aurait coupé silencieusement la mise à jour de `blockingEnabledCache` — le blocage restant figé sur son dernier état sans qu'aucun log n'indique pourquoi. `try/catch` + log ajoutés par cohérence défensive.
+
+5. **`AccessibilityChecker.isServiceEnabled`** comparait la chaîne `ENABLED_ACCESSIBILITY_SERVICES` par `contains(simpleName)` — fragile en théorie (un service homonyme d'une autre app aurait pu matcher). Remplacé par une comparaison stricte sur le nom pleinement qualifié `package/package.Classe`, le format réel du champ système. Sans lien direct avec le bug Xiaomi, mais durcissement raisonnable trouvé au passage.
+
+**Validation réalisée sans le device concerné** :
+- Build release + debug : compilation propre.
+- Galaxy S24 : réinstallation, activation du service via `adb shell settings put secure enabled_accessibility_services ...` (contourne l'UI système pour forcer un cycle `onServiceConnected` propre), vérification `dumpsys accessibility` → `Crashed services: {}` (vide), service listé comme `Bound`, tag `(A11yTool)` présent.
+- Lancement d'Instagram, `adb logcat -s ReelsAccessibilityService:*` → événements `TYPE_WINDOW_CONTENT_CHANGED` bien reçus en continu, aucune ligne `Erreur`/`Échec`/`Exception` sur toute la session.
+- Non-régression confirmée sur Samsung ; **comportement réel sur Xiaomi 15T Pro / Android 16 non vérifié**, à confirmer par la personne testant le device.
+
+**Limites assumées** : la cause n°1 (la plus probable) n'est pas un bug applicatif — aucune ligne de code ne peut lever une restriction de sécurité Android décidée par l'utilisateur/le système à l'installation. Les corrections 2 à 5 réduisent le risque de crash silencieux et améliorent le diagnostic (logs exploitables), mais ne garantissent pas, à elles seules, que le message disparaisse si la cause réelle est la restriction système.
+
+---
+
 ## Bilan des versions
 
-V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → v2.4.3 (fix debounce de fermeture du lecteur en stress test, validé terrain) → v2.4.4 (renommage "Réel Ctrl", titre d'accueil restylé) → v2.4.5 (APK release minifiée -88 %, fuite mineure corrigée) → **v2.4.6** (compteur de déblocages sur l'accueil, nouvelle table unlock_events).
+V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → v2.4.3 (fix debounce de fermeture du lecteur en stress test, validé terrain) → v2.4.4 (renommage "Réel Ctrl", titre d'accueil restylé) → v2.4.5 (APK release minifiée -88 %, fuite mineure corrigée) → v2.4.6 (compteur de déblocages sur l'accueil, nouvelle table unlock_events) → **v2.4.7** (robustesse service accessibilité, correctifs Xiaomi HyperOS/Android 16, non testé device réel).
 
 ## Compétences illustrées par ce projet
 

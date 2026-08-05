@@ -302,6 +302,32 @@ Synthèse ; diagnostic complet dans [docs/JOURNAL_TECHNIQUE.md](docs/JOURNAL_TEC
 - **UI** : layout de la carte stats réorganisé en 3 colonnes (séparées par des filets
   verticaux) au lieu de 2, en appelant `HistoryRepository.observeUnlockCountToday()`.
 
+## v2.4.7 — Robustesse service accessibilité Xiaomi HyperOS (2026-08-05)
+
+Correctifs suite au signalement « Ce service ne fonctionne pas » sur Xiaomi 15T Pro (Android 16,
+HyperOS) — analyse détaillée dans `docs/JOURNAL_TECHNIQUE.md` §19.
+
+- **`isAccessibilityTool="true"`** ajouté à `accessibility_service_config.xml` (recommandé
+  Android 14+, réduit la friction OEM à l'activation). Vérifié sur device : le service apparaît
+  désormais tagué `(A11yTool)` dans `dumpsys accessibility`.
+- **`onServiceConnected` sans garde globale** : toute exception pendant l'initialisation (accès
+  Room, cast `Application`) faisait planter le process du service — cause probable du message
+  système générique. Extraction en `initService()` encapsulée dans un `try/catch` avec log
+  détaillé (stacktrace complète).
+- **Collecteur de Flow non protégé** (`observe(blockingEnabled)`) : une erreur Room y aurait
+  coupé silencieusement la mise à jour de l'état sans aucune trace. `try/catch` + log ajoutés.
+- **`AccessibilityChecker.isServiceEnabled`** comparait par `simpleName` seul (fragile, risque
+  de faux positif avec un service homonyme) : passage à une comparaison par nom pleinement
+  qualifié (`package/package.Classe`), conforme au format réel de
+  `ENABLED_ACCESSIBILITY_SERVICES`.
+- **`INSTALL.md`** : nouvelle section Xiaomi/HyperOS documentant la cause principale identifiée
+  (« Restricted settings », protection Android 13+ sur les apps installées hors Play Store) et
+  la procédure de déblocage côté utilisateur — non résolvable par du code applicatif.
+
+Validé sur Galaxy S24 (non-régression uniquement, Xiaomi 15T Pro non disponible pour ce test) :
+service bindé sans crash (`Crashed services: {}` vide), événements Instagram bien reçus, aucune
+erreur en logs.
+
 ## V1.0-beta — Version initiale
 
 Voir [DEPLOYMENT.md](DEPLOYMENT.md) et [README.md](README.md) pour l'état des lieux avant
