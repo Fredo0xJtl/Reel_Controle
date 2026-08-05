@@ -184,12 +184,22 @@ object InstagramUiDetector {
      * Vérifie que le bouton d'onglet Reels est l'onglet actif.
      * Cherche d'abord par identifiant de vue, puis par libellé, et remonte au parent
      * cliquable si le nœud porteur du texte n'est pas lui-même l'élément sélectionnable.
+     *
+     * Garde de visibilité (bug constaté en test terrain, Galaxy S24) : quand le lecteur plein
+     * écran s'ouvre par-dessus, Instagram masque la barre de navigation inférieure, mais son
+     * bouton Reels reste présent dans l'arbre d'accessibilité avec son flag `isSelected` figé à
+     * sa dernière valeur connue (dès qu'on a tapé une fois sur l'onglet Reels dédié, ce flag ne
+     * redevient jamais `false`). Sans ce filtre, tout Reels ouvert plus tard depuis le feed
+     * Accueil héritait à tort de ce flag « collé », classé comme onglet Reels dédié et fermé
+     * immédiatement — alors qu'aucun swipe n'avait eu lieu. Un onglet réellement actif est
+     * toujours visible à l'écran ; un nœud invisible ne peut porter qu'un état obsolète.
      */
     private fun isReelsTabSelected(root: AccessibilityNodeInfo): Boolean {
         findFirstByAnyViewId(root, REELS_TAB_VIEW_IDS)?.let { node ->
+            val visible = node.isVisibleToUser
             val selected = isSelectedOrAncestorSelected(node)
             node.recycle()
-            if (selected) return true
+            if (visible && selected) return true
         }
 
         REELS_TAB_LABELS.forEach { label ->
@@ -207,7 +217,7 @@ object InstagramUiDetector {
                     // Un libellé exact évite de capter « Reels et vidéos », « Voir les Reels », etc.
                     val exactLabel = node.contentDescription?.toString()?.equals(label, ignoreCase = true) == true ||
                             node.text?.toString()?.equals(label, ignoreCase = true) == true
-                    if (exactLabel && isSelectedOrAncestorSelected(node)) {
+                    if (exactLabel && node.isVisibleToUser && isSelectedOrAncestorSelected(node)) {
                         found = true
                     }
                 }
