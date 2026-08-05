@@ -103,7 +103,7 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
-                Text("RÉELS CONTRÔLE", style = FocusReelsType.screenTitle, color = colors.text)
+                Text("Réel Contrôle", style = FocusReelsType.screenTitle, color = colors.text)
                 Text(versionLabel, style = FocusReelsType.mono, color = colors.sub)
             }
 
