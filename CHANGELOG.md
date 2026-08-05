@@ -196,6 +196,47 @@ Le flag `DIAGNOSTIC_DUMP` dans `ReelsAccessibilityService` trace l'arbre complet
 logs applicatifs (via `InstagramUiDetector.dumpTree`) pour un recalibrage rapide en cas de
 changement d'UI Instagram, sans repasser par `uiautomator`.
 
+## v1.9 → v2.3 — Refonte de la détection et durcissement (2026-08-04 → 2026-08-05)
+
+Synthèse ; diagnostic complet dans [docs/JOURNAL_TECHNIQUE.md](docs/JOURNAL_TECHNIQUE.md).
+
+- Refonte de la détection du lecteur Reels plein écran, fiable quelle que soit son origine
+  (onglet dédié, Explorer, profil, hashtag).
+- Distinction Reels reçus en DM (tolérance de swipe) vs onglet Reels dédié (blocage immédiat).
+- Audit exhaustif ayant révélé 21 bugs (dont fuites de nœuds d'accessibilité, faux positifs
+  de clic synthétique, garde-fous de premier plan) — corrigés.
+- Audit de confidentialité final (aucune donnée hors appareil).
+
+## v2.3.3 → v2.3.16 — Fiabilisation feed/DM/onglet dédié et écran fractionné (2026-08-05)
+
+- Abandon définitif du flag `isSelected` (non fiable) au profit de la détection par clic
+  explicite sur le bouton d'onglet Reels, avec filtre de position (zone réelle de la barre
+  de navigation) pour écarter les clics synthétiques d'Instagram.
+- Fenêtre de grâce de 700ms après ouverture du lecteur pour ignorer le scroll de l'animation
+  d'ouverture (Reel du feed fermé à tort sans swipe).
+- Prise en charge de l'écran fractionné : la zone de clic est désormais mesurée sur la
+  fenêtre réelle d'Instagram, plus sur l'écran physique entier (une autre app en fenêtré
+  par-dessus, ex. YouTube, ne perturbe plus l'analyse).
+- Historique remplacé par un graphique en barres (jour/mois), détail au clic sur une barre.
+- Réduction du délai avant blocage d'un Reel (`BLOCK_COOLDOWN_MS` 1500→400ms,
+  `VERIFY_DELAY_MS` 800→300ms).
+
+## v2.4.0 — Audit pré-release et stress test (2026-08-05)
+
+- 9 corrections issues d'un stress test terrain (cycles activer/désactiver via ADB, mesure
+  CPU/mémoire sur appareil) : fuites de nœuds d'accessibilité (`handleScroll`,
+  `isInstagramForeground`, `findInstagramRoot`), boucles de scan/collecteurs cumulatives lors
+  des reconnexions du service, son média pouvant rester bloqué à 0, cadence de scan
+  adaptative (30ms actif / 500ms au repos, -92% CPU au repos mesuré), garde-fou anti-boucle
+  infinie recalibré, variable d'état non `@Volatile`.
+
+## v2.4.1 — Nettoyage du code mort (2026-08-05)
+
+- Suppression d'environ 160 lignes de code mort dans `InstagramUiDetector` issues de
+  l'ancienne approche par flag `isSelected`, abandonnée en v2.3.3 (vérifiées sans appelant
+  externe avant suppression).
+- Journal technique complété.
+
 ## V1.0-beta — Version initiale
 
 Voir [DEPLOYMENT.md](DEPLOYMENT.md) et [README.md](README.md) pour l'état des lieux avant
