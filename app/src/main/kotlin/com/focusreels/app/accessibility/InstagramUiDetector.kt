@@ -28,7 +28,7 @@ object InstagramUiDetector {
     private const val PACKAGE = "com.instagram.android"
 
     /** Bouton « Reels » de la barre de navigation inférieure : présent partout, à tester via isSelected. */
-    private val REELS_TAB_VIEW_IDS = listOf(
+    val REELS_TAB_VIEW_IDS = listOf(
         "$PACKAGE:id/clips_tab",
         "$PACKAGE:id/reels_tab",
         "$PACKAGE:id/clips_icon",

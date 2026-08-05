@@ -36,8 +36,14 @@ class ReelsAccessibilityService : AccessibilityService() {
          * Délai minimal entre deux redirections. Sans ce garde-fou, un écran Reels émet
          * plusieurs événements de contenu par seconde et le service enchaîne les retours
          * arrière, ce qui sort l'utilisateur d'Instagram voire d'autres applications.
+         *
+         * Réduit de 1500ms à 400ms (retour utilisateur : un Reel rouvert juste après un premier
+         * blocage — ex. test répété de l'onglet Reels dédié — restait affiché jusqu'à 1,5s avant
+         * d'être rebloqué, un temps variable et perceptible). 400ms reste largement suffisant
+         * pour laisser l'animation de fermeture d'Instagram se terminer (mesurée ~250-300ms en
+         * usage réel) sans réintroduire le risque de retours arrière en rafale.
          */
-        private const val BLOCK_COOLDOWN_MS = 1_500L
+        private const val BLOCK_COOLDOWN_MS = 400L
 
         /**
          * Passer à true pour tracer l'arbre d'accessibilité complet et recalibrer les
@@ -54,13 +60,15 @@ class ReelsAccessibilityService : AccessibilityService() {
          * indéfiniment. On vérifie donc explicitement le résultat après un court délai, plutôt
          * que de dépendre uniquement de l'arrivée d'un futur événement (constat empirique §4.5).
          */
-        // Suffisamment long pour laisser l'animation de changement d'onglet d'Instagram se
-        // terminer (constat empirique : une vérification trop rapide, ~400ms, pouvait lire
-        // l'onglet Reels comme encore « sélectionné » en pleine transition et déclencher un
-        // second clic sur Accueil alors que le premier avait déjà réussi — d'où un aller-retour
-        // visible entre les deux onglets, Instagram traitant un second tap sur Accueil comme une
-        // demande de rafraîchissement/retour en haut du flux).
-        private const val VERIFY_DELAY_MS = 800L
+        // Historiquement 800ms (constat empirique sur l'ancienne stratégie de clic sur l'onglet
+        // Accueil : une vérification trop rapide pouvait lire l'onglet Reels comme encore
+        // « sélectionné » en pleine transition et déclencher un second clic à tort). La stratégie
+        // a depuis changé pour un retour arrière ([GLOBAL_ACTION_BACK]), dont l'animation de
+        // fermeture est plus rapide et sans ce risque d'aller-retour entre onglets. Réduit à
+        // 300ms (retour utilisateur : le temps d'ouverture perçu d'un Reel devait être minimisé
+        // au maximum) — encore net au-dessus de la durée d'animation mesurée en usage réel
+        // (~150-250ms), donc sans faux retries.
+        private const val VERIFY_DELAY_MS = 300L
 
         /**
          * Garde-fou de sécurité uniquement (protection contre une boucle infinie en cas de bug),
@@ -71,11 +79,15 @@ class ReelsAccessibilityService : AccessibilityService() {
          * suite sur l'onglet Reels finissait par "gagner" et voir son Reels rester affiché
          * (constat empirique, contournement du blocage). Tant que le blocage est actif et que le
          * Reels général reste détecté, la chaîne doit continuer ; seule [blockingEnabledCache]
-         * passant à false (déblocage via friction) ou la sortie d'Instagram y met fin. ~160
-         * tentatives × 800ms ≈ 2 minutes avant abandon de sécurité, largement suffisant pour ne
-         * jamais être atteint en usage normal.
+         * passant à false (déblocage via friction) ou la sortie d'Instagram y met fin.
+         *
+         * Recalibré lors de l'audit pré-release : la valeur de 160 avait été dimensionnée pour un
+         * [VERIFY_DELAY_MS] de 800 ms (≈ 2 minutes de marge). Ce délai ayant été ramené à 300 ms
+         * pour raccourcir le temps d'affichage d'un Reels, la même limite ne couvrait plus que
+         * ~48 s — le garde-fou devenait atteignable dans un cas anormal prolongé, et la chaîne
+         * aurait abandonné le blocage. Remonté à 400 pour préserver les ~2 minutes d'origine.
          */
-        private const val MAX_VERIFY_RETRIES = 160
+        private const val MAX_VERIFY_RETRIES = 400
 
         /**
          * Délai minimal entre deux analyses de l'arbre d'accessibilité. `TYPE_WINDOW_CONTENT_CHANGED`
@@ -86,17 +98,54 @@ class ReelsAccessibilityService : AccessibilityService() {
         private const val SCAN_THROTTLE_MS = 30L
 
         /**
+         * Cadence du scan périodique au repos : blocage désactivé, ou Instagram hors du premier
+         * plan. Aucun blocage ne peut survenir dans ces états, donc sonder 33 fois par seconde
+         * (cf. [SCAN_THROTTLE_MS]) n'apportait rien et consommait de la batterie en continu
+         * (audit pré-release). Le retour d'Instagram au premier plan émet de toute façon un
+         * `TYPE_WINDOW_STATE_CHANGED` traité par le chemin événementiel : ce sondage lent n'est
+         * qu'un filet de sécurité, sa latence n'est jamais sur le chemin critique d'un blocage.
+         */
+        private const val IDLE_SCAN_INTERVAL_MS = 500L
+
+        /**
          * Fenêtre pendant laquelle on considère qu'on est encore en contexte DM après avoir vu
          * une conversation, le temps que le lecteur plein écran finisse de s'ouvrir
          * (cf. [isBlockedReelsScreen]).
          */
         /** Passes consécutives où le lecteur doit être visible avant d'agir (cf. [isBlockedReelsScreen]). */
         private const val VIEWER_DEBOUNCE_COUNT = 2
+
+        /**
+         * Durée pendant laquelle un clic détecté sur l'onglet Reels dédié
+         * ([reelsTabTappedAtUptimeMs]) reste valide pour trancher l'origine du prochain lecteur
+         * plein écran. Largement supérieure au délai réel tap → ouverture du lecteur (quelques
+         * dizaines de ms en pratique), mais assez courte pour ne jamais s'appliquer à tort à un
+         * Reels ouvert plus tard depuis le feed après être resté sur cet onglet.
+         */
+        private const val REELS_TAB_TAP_VALIDITY_MS = 2_000L
+
+        /**
+         * Fenêtre de grâce après la toute première détection du lecteur plein écran
+         * ([viewerOpenedAtUptimeMs]) pendant laquelle les TYPE_VIEW_SCROLLED sont ignorés. Bug
+         * constaté en test terrain : ouvrir un Reel du feed déclenche à lui seul un
+         * TYPE_VIEW_SCROLLED sur le pager (~100ms après ouverture, settling de l'animation
+         * d'ouverture), sans le moindre swipe utilisateur — ce qui consommait à tort 1 swipe de
+         * la tolérance et provoquait une fermeture prématurée.
+         */
+        private const val SCROLL_SETTLING_GRACE_MS = 700L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var blockedAppRepository: BlockedAppRepository
     private lateinit var historyRepository: HistoryRepository
+    /**
+     * `@Volatile` (audit pré-release) : la référence est RÉASSIGNÉE dans [onServiceConnected]
+     * (thread principal) alors qu'elle est lue depuis le collecteur de Flow (Dispatchers.Default,
+     * pour propager `toleratedSwipes`) et depuis les callbacks d'accessibilité. Sans cette
+     * annotation, un thread pouvait continuer à voir l'ancienne instance après une reconnexion du
+     * service et appliquer la tolérance de swipes à un tracker devenu orphelin.
+     */
+    @Volatile
     private var swipeTracker = SwipeSessionTracker(toleratedSwipes = Defaults.TOLERATED_SWIPES_AFTER_DM)
     private var lastBlockUptimeMs = 0L
     private var lastScanUptimeMs = 0L
@@ -107,6 +156,16 @@ class ReelsAccessibilityService : AccessibilityService() {
     /** True tant que le lecteur plein écran était ouvert lors de la dernière passe (cf. [isBlockedReelsScreen]). */
     private var wasViewerOpenLastScan = false
 
+    /**
+     * Horodatage (uptimeMillis) de la toute première détection du lecteur plein écran pour
+     * l'ouverture en cours, ou 0 si aucune. Utilisé par [handleScroll] pour ignorer les
+     * `TYPE_VIEW_SCROLLED` de settling émis par l'ouverture elle-même (bug constaté en test
+     * terrain : un Reel de feed ouvert normalement, sans le moindre swipe utilisateur, se
+     * fermait quand même — l'animation d'ouverture du pager émettait à elle seule un événement
+     * de scroll consommant 1 swipe de la tolérance).
+     */
+    private var viewerOpenedAtUptimeMs = 0L
+
     /** Origine DM du lecteur actuellement ouvert, figée à l'ouverture (cf. [isBlockedReelsScreen]). */
     private var currentViewerIsDm = false
 
@@ -115,6 +174,19 @@ class ReelsAccessibilityService : AccessibilityService() {
 
     /** True une fois que l'origine du lecteur a été tranché pour l'ouverture en cours (cf. [isBlockedReelsScreen]). */
     private var viewerOriginDecided = false
+
+    /**
+     * Horodatage (uptimeMillis) du dernier clic détecté sur le bouton d'onglet Reels dédié, ou
+     * 0 si aucun. Seul signal retenu pour classer un lecteur comme "onglet Reels dédié" (cf.
+     * [isBlockedReelsScreen]) : le flag `isSelected` sondé a été abandonné après plusieurs bugs
+     * constatés en test terrain (scintille, reste collé après avoir quitté l'onglet, y compris
+     * capturé juste avant l'ouverture du lecteur). Le clic explicite (`TYPE_VIEW_CLICKED`) est le
+     * seul signal fiable de l'intention réelle de l'utilisateur. Fenêtre de validité courte
+     * ([REELS_TAB_TAP_VALIDITY_MS]) : ce signal ne doit compter que pour l'ouverture de lecteur
+     * qui suit immédiatement le tap, pas pour un Reels ouvert bien plus tard depuis le feed.
+     */
+    @Volatile
+    private var reelsTabTappedAtUptimeMs = 0L
 
 
     /**
@@ -182,6 +254,15 @@ class ReelsAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
 
+        // Annule tout ce qui tournait encore d'une connexion précédente AVANT de relancer
+        // (audit pré-release). `onServiceConnected` peut être rappelé sans `onUnbind` préalable
+        // (reconnexion du service par le système, changement de configuration d'accessibilité) :
+        // sans cette annulation, chaque reconnexion empilait une boucle de scan `while (true)`
+        // et un collecteur de Flow supplémentaires, tous actifs en parallèle — la consommation
+        // CPU/batterie doublait donc à chaque cycle activer/désactiver, et plusieurs boucles
+        // pouvaient déclencher des chaînes de redirection concurrentes.
+        scope.coroutineContext.cancelChildren()
+
         // Réinitialiser tous les flags d'état (surtout après un redémarrage du service).
         // Sans cela, un cycle désactiver/réactiver peut laisser des états figés
         // qui bloquent le blocage futur (ex. redirectChainActive collé à true).
@@ -191,16 +272,23 @@ class ReelsAccessibilityService : AccessibilityService() {
         viewerOriginDecided = false
         currentViewerIsDm = false
         currentViewerIsFromFeed = false
+        reelsTabTappedAtUptimeMs = 0L
         lastBlockUptimeMs = 0L
         lastScanUptimeMs = 0L
-        savedMusicVolume = null
         swipeTracker = SwipeSessionTracker(toleratedSwipes = Defaults.TOLERATED_SWIPES_AFTER_DM)
-        unmuteMediaAudio()
 
         val app = application as FocusReelsApplication
         blockedAppRepository = BlockedAppRepository(app.database)
         historyRepository = HistoryRepository(app.database)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Restaurer AVANT de purger `savedMusicVolume`, pas après (ordre corrigé lors de l'audit
+        // pré-release) : la remise à null précédait l'appel, si bien qu'[unmuteMediaAudio] sortait
+        // aussitôt sur son `?: return` sans jamais rendre le son. Une reconnexion à chaud survenue
+        // alors que le volume était coupé laissait donc le téléphone muet, en ayant en plus perdu
+        // la mémoire du volume d'origine. `audioManager` doit être initialisé avant cet appel.
+        unmuteMediaAudio()
+        savedMusicVolume = null
         scope.launch {
             blockedAppRepository.observe(AppIds.INSTAGRAM).collect { entity ->
                 blockingEnabledCache = entity?.blockingEnabled == true
@@ -221,16 +309,32 @@ class ReelsAccessibilityService : AccessibilityService() {
         // filtrage, une fenêtre Instagram résiduelle en arrière-plan était trouvée par
         // [findInstagramRoot], déclenchant une chaîne de vérification qui s'appliquait à l'app
         // réellement au premier plan (écran noir sur YouTube).
+        //
+        // Cadence adaptative (audit pré-release) : la boucle tournait à [SCAN_THROTTLE_MS] (30 ms,
+        // soit ~33 sondages/seconde) en permanence — y compris blocage désactivé, Instagram fermé
+        // ou téléphone au repos. Chaque tour appelle `rootInActiveWindow`, un appel IPC vers le
+        // système loin d'être gratuit : c'était une consommation batterie continue pour rien. Le
+        // rythme rapide n'est utile que quand un blocage peut réellement survenir, donc uniquement
+        // quand le blocage est actif ET qu'Instagram est au premier plan. Sinon on repasse à un
+        // sondage lent ([IDLE_SCAN_INTERVAL_MS]), assez réactif pour repérer le retour d'Instagram
+        // sans peser (l'arrivée au premier plan émet de toute façon un TYPE_WINDOW_STATE_CHANGED
+        // qui déclenche [handleWindowUpdate] par le chemin événementiel).
         scope.launch(Dispatchers.Main) {
             while (true) {
-                delay(SCAN_THROTTLE_MS)
-                try {
-                    if (isInstagramForeground()) {
-                        handleWindowUpdate()
-                    }
+                val instagramActive = try {
+                    blockingEnabledCache && isInstagramForeground()
                 } catch (e: Exception) {
                     Log.w(TAG, "Erreur pendant le scan périodique : ${e.message}")
+                    false
                 }
+                if (instagramActive) {
+                    try {
+                        handleWindowUpdate()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Erreur pendant le scan périodique : ${e.message}")
+                    }
+                }
+                delay(if (instagramActive) SCAN_THROTTLE_MS else IDLE_SCAN_INTERVAL_MS)
             }
         }
         Log.i(TAG, "Service d'accessibilité connecté et prêt")
@@ -241,7 +345,24 @@ class ReelsAccessibilityService : AccessibilityService() {
         // scope, chaque cycle laisse un collecteur du Flow Room tourner indéfiniment en tâche
         // de fond (fuite cumulative).
         scope.coroutineContext.cancelChildren()
+        // Filet de sécurité audio (audit pré-release) : le volume média est mis à 0 dès qu'un
+        // Reels bloqué est détecté, et restauré par [endRedirectChain] / [handleWindowUpdate].
+        // Si le service est arrêté PENDANT cette fenêtre (désactivation de l'accessibilité par
+        // l'utilisateur, service tué par le système, mise à jour de l'app), plus personne ne
+        // restaurait le volume : le téléphone restait muet sans cause visible, et la seule
+        // solution pour l'utilisateur était de remonter le son à la main sans comprendre
+        // pourquoi. Toute sortie du service doit donc rendre le son.
+        unmuteMediaAudio()
         return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        // Même filet de sécurité qu'[onUnbind] : `onUnbind` n'est pas garanti d'être appelé dans
+        // tous les scénarios d'arrêt (kill système notamment). `unmuteMediaAudio` est idempotent
+        // (no-op si aucun volume n'a été sauvegardé), donc l'appeler deux fois est sans effet.
+        unmuteMediaAudio()
+        scope.coroutineContext.cancelChildren()
+        super.onDestroy()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -255,7 +376,104 @@ class ReelsAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> handleWindowUpdate()
 
             AccessibilityEvent.TYPE_VIEW_SCROLLED -> handleScroll(event)
+
+            AccessibilityEvent.TYPE_VIEW_CLICKED -> handleClick(event)
         }
+    }
+
+    /**
+     * Capture l'intention explicite de l'utilisateur d'ouvrir l'onglet Reels dédié, via le clic
+     * lui-même plutôt qu'un état sondé après coup (cf. [reelsTabTappedAtUptimeMs]).
+     *
+     * Remonte quelques niveaux de parenté (comme [InstagramUiDetector.isSelectedOrAncestorSelected]
+     * le fait déjà pour `isSelected`) : bug constaté en test terrain, retour utilisateur — le clic
+     * n'était pas détecté à chaque tentative. `event.source` est le nœud PRÉCIS qui a reçu le
+     * clic (souvent l'icône ou le libellé texte à l'intérieur du bouton d'onglet), pas
+     * nécessairement le nœud porteur de l'identifiant `clips_tab`/`reels_tab` lui-même — sans
+     * cette remontée, la comparaison directe d'ID ratait le clic dans ce cas.
+     */
+    private fun handleClick(event: AccessibilityEvent) {
+        try {
+            var node = event.source ?: return
+            var depth = 0
+            var owns = false
+            while (depth <= 3) {
+                val id = node.viewIdResourceName
+                if (id != null && InstagramUiDetector.REELS_TAB_VIEW_IDS.contains(id)) {
+                    // Garde de position (bug constaté en test terrain, retour utilisateur) :
+                    // Instagram émet parfois un TYPE_VIEW_CLICKED portant l'ID exact du bouton
+                    // d'onglet Reels SANS que l'utilisateur ait tapé cet onglet — observé à peine
+                    // 56 ms après l'ouverture d'un Reel du feed (mise à jour interne de sélection
+                    // synthétique, pas un vrai tap). Un tap RÉEL sur l'onglet ne peut provenir que
+                    // de la barre de navigation inférieure, toujours dans le dernier ~15% de la
+                    // hauteur d'écran ; un événement synthétique déclenché par l'ouverture d'un
+                    // Reel de feed porte les coordonnées du nœud (potentiellement hors écran ou
+                    // au centre), pas celles d'un tap physique en bas. Ce filtre élimine les faux
+                    // positifs qui reclassaient à tort un Reel de feed en "onglet dédié".
+                    val bounds = android.graphics.Rect()
+                    node.getBoundsInScreen(bounds)
+                    val isInBottomNavZone = isInBottomNavZoneOfInstagramWindow(bounds)
+                    if (isInBottomNavZone) {
+                        reelsTabTappedAtUptimeMs = SystemClock.uptimeMillis()
+                        Log.d(TAG, "Clic détecté sur l'onglet Reels dédié (profondeur $depth, y=${bounds.top})")
+                    } else {
+                        Log.d(TAG, "Clic ignoré : ID onglet Reels mais hors zone de la barre de nav (profondeur $depth, y=${bounds.top})")
+                    }
+                    if (owns) {
+                        @Suppress("DEPRECATION")
+                        node.recycle()
+                    }
+                    return
+                }
+                val parent = node.parent
+                if (owns) {
+                    @Suppress("DEPRECATION")
+                    node.recycle()
+                }
+                if (parent == null) return
+                node = parent
+                owns = true
+                depth++
+            }
+            if (owns) {
+                @Suppress("DEPRECATION")
+                node.recycle()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Erreur lors de la détection de clic sur l'onglet Reels : ${e.message}")
+        }
+    }
+
+    /**
+     * Vrai si [nodeBounds] se situe dans les ~15% inférieurs de la fenêtre Instagram — celle-ci,
+     * pas l'écran physique entier.
+     *
+     * Bug constaté en test terrain (retour utilisateur, écran fractionné avec YouTube ouvert en
+     * fenêtré à côté d'Instagram) : la comparaison se faisait contre
+     * `resources.displayMetrics.heightPixels`, la hauteur totale du DEVICE. En affichage
+     * fractionné, Instagram n'occupe qu'une partie de l'écran — sa propre barre de navigation
+     * inférieure se trouve donc bien avant les 85% de la hauteur du device, jamais reconnue comme
+     * la zone de la barre de nav. Résultat : plus aucun clic sur l'onglet Reels dédié n'était
+     * détecté en écran fractionné, cassant la classification feed/onglet dédié de tout Reels
+     * ouvert dans ce mode. On mesure désormais la hauteur de la fenêtre Instagram elle-même (via
+     * [findInstagramRoot]), avec repli sur la hauteur du device si elle est indisponible.
+     */
+    private fun isInBottomNavZoneOfInstagramWindow(nodeBounds: android.graphics.Rect): Boolean {
+        val windowBounds = android.graphics.Rect()
+        val instagramRoot = findInstagramRoot()
+        if (instagramRoot != null) {
+            try {
+                instagramRoot.getBoundsInScreen(windowBounds)
+            } finally {
+                @Suppress("DEPRECATION")
+                instagramRoot.recycle()
+            }
+        }
+        val hasUsableWindowBounds = windowBounds.height() > 0
+        val windowTop = if (hasUsableWindowBounds) windowBounds.top else 0
+        val windowBottom = if (hasUsableWindowBounds) windowBounds.bottom else resources.displayMetrics.heightPixels
+        val windowHeight = windowBottom - windowTop
+        return nodeBounds.top >= (windowTop + windowHeight * 0.85f)
     }
 
     /**
@@ -296,18 +514,58 @@ class ReelsAccessibilityService : AccessibilityService() {
         if (!InstagramUiDetector.isImmersiveReelsViewerOpen(root)) {
             consecutiveViewerDetections = 0
             wasViewerOpenLastScan = false
-            viewerOriginDecided = false
-            currentViewerIsDm = false
-            currentViewerIsFromFeed = false
-            // Bug constaté en test terrain : sans ce reset, swipeTracker.inDmReelsContext restait
-            // à true et swipeCount ne repartait jamais de zéro d'une ouverture de lecteur à
-            // l'autre (reset() n'était appelé que sur l'onglet Reels dédié). Un premier Reels DM
-            // ou feed consommait sa tolérance, puis le Reels SUIVANT héritait d'un compteur déjà
-            // dépassé et se fermait instantanément, sans le moindre swipe. Le lecteur qui se ferme
-            // (retour au feed/à la conversation) doit systématiquement repartir sur une tolérance
-            // neuve pour la prochaine ouverture.
-            swipeTracker.reset()
+
+            // Ne PAS réinitialiser l'origine déjà tranchée (viewerOriginDecided / currentViewerIsDm
+            // / currentViewerIsFromFeed / swipeTracker) tant qu'une chaîne de redirection est en
+            // cours. Bug constaté en test terrain (logcat) : sur l'onglet Reels dédié, notre propre
+            // retour arrière ne quitte pas toujours le lecteur — Instagram peut l'interpréter comme
+            // une navigation dans son historique interne (Reel précédent), provoquant une
+            // fermeture/réouverture furtive du conteneur plein écran PENDANT les tentatives de
+            // vérification ([performRedirectAndVerify]). Cette fermeture éphémère faisait perdre le
+            // classement "onglet dédié" déjà établi ; la réouverture qui suivait était re-tranchée
+            // trop tôt (avant que la barre de nav ne redevienne lisible) et retombait à tort sur
+            // "feed", ce qui accordait une tolérance de swipe alors qu'aucune n'est due sur cet
+            // onglet. Une fermeture pendant une chaîne active n'est pas une fermeture confirmée :
+            // seule une fermeture survenant hors chaîne (l'utilisateur a vraiment quitté l'écran)
+            // doit déclencher une nouvelle décision.
+            if (!redirectChainActive) {
+                viewerOriginDecided = false
+                currentViewerIsDm = false
+                currentViewerIsFromFeed = false
+                viewerOpenedAtUptimeMs = 0L
+                // Bug constaté en test terrain : sans ce reset, swipeTracker.inDmReelsContext
+                // restait à true et swipeCount ne repartait jamais de zéro d'une ouverture de
+                // lecteur à l'autre (reset() n'était appelé que sur l'onglet Reels dédié). Un
+                // premier Reels DM ou feed consommait sa tolérance, puis le Reels SUIVANT héritait
+                // d'un compteur déjà dépassé et se fermait instantanément, sans le moindre swipe.
+                // Le lecteur qui se ferme (retour au feed/à la conversation) doit systématiquement
+                // repartir sur une tolérance neuve pour la prochaine ouverture.
+                swipeTracker.reset()
+                // Capturé ICI, pas au moment de la décision : c'est le seul instant où la barre de
+                // navigation est réellement affichée à l'écran (le lecteur plein écran n'est pas
+                // ouvert), donc où son flag isSelected est honnête. Une fois le lecteur ouvert,
+                // Instagram peut recouvrir la barre de nav sans jamais la marquer invisible pour
+                // l'accessibilité (pas de notion d'occlusion en z-order côté isVisibleToUser) —
+                // lire ce flag à ce moment-là renvoyait donc un verdict obsolète.
+                //
+                // ABANDONNÉ (bug constaté en test terrain, retour utilisateur) : même capturé à ce
+                // moment "honnête", `isSelected` reste le flag documenté comme structurellement
+                // peu fiable ailleurs dans ce fichier (scintille, reste collé après avoir quitté
+                // l'onglet). Un Reel ouvert depuis le feed 14 secondes après un passage sur
+                // l'onglet Reels dédié était encore classé "onglet dédié" à cause de ce flag
+                // resté collé au moment précis du snapshot. Ne plus l'utiliser du tout : seul le
+                // clic explicite ([reelsTabTappedAtUptimeMs]) est assez fiable pour classer
+                // "onglet dédié". Sans clic récent détecté, le classement par défaut est "feed"
+                // (comportement le plus sûr : au pire une tolérance de swipe est accordée à tort,
+                // largement préférable à fermer un Reel du feed que l'utilisateur a le droit de
+                // regarder).
+            }
             return false
+        }
+        if (!wasViewerOpenLastScan) {
+            // Toute première détection de cette ouverture : capture le point de départ de la
+            // fenêtre de grâce anti-settling (cf. [viewerOpenedAtUptimeMs] et [handleScroll]).
+            viewerOpenedAtUptimeMs = SystemClock.uptimeMillis()
         }
         wasViewerOpenLastScan = true
 
@@ -327,8 +585,20 @@ class ReelsAccessibilityService : AccessibilityService() {
         // Attendre le debounce laisse le temps aux marqueurs de se stabiliser.
         if (!viewerOriginDecided) {
             currentViewerIsDm = InstagramUiDetector.isReelViewerFromDirectMessage(root)
-            currentViewerIsFromFeed = InstagramUiDetector.isReelViewerFromGeneralFeed(root)
+            // Seul signal retenu pour "onglet Reels dédié" : le clic explicite détecté
+            // (cf. [reelsTabTappedAtUptimeMs]). Le flag `isSelected` sondé (ancien fallback,
+            // supprimé) s'est révélé peu fiable même capturé juste avant l'ouverture du lecteur
+            // (bug constaté : Reel de feed classé "dédié" 14s après un passage sur l'onglet, à
+            // cause du flag resté collé). Sans clic récent, on classe par défaut "feed" — le
+            // choix le plus sûr, une tolérance de swipe accordée à tort étant largement moins
+            // gênante qu'un Reel du feed fermé sans swipe.
+            val recentReelsTabTap = reelsTabTappedAtUptimeMs != 0L &&
+                    SystemClock.uptimeMillis() - reelsTabTappedAtUptimeMs <= REELS_TAB_TAP_VALIDITY_MS
+            currentViewerIsFromFeed = !currentViewerIsDm && !recentReelsTabTap
             viewerOriginDecided = true
+            // Consommé : un tap resterait sinon valide jusqu'à REELS_TAB_TAP_VALIDITY_MS et
+            // pourrait à tort couvrir un Reel de feed ouvert juste après avoir quitté l'onglet.
+            reelsTabTappedAtUptimeMs = 0L
             val origin = when {
                 currentViewerIsDm -> "DM"
                 currentViewerIsFromFeed -> "feed Accueil/Explorer/profil"
@@ -341,6 +611,24 @@ class ReelsAccessibilityService : AccessibilityService() {
             } else {
                 // Onglet Reels dédié : pas de tolérance, blocage immédiat. Purger tout résidu.
                 swipeTracker.reset()
+            }
+        } else if (currentViewerIsFromFeed && !currentViewerIsDm) {
+            // Rattrapage : un classement "feed" déjà tranché peut être corrigé si un clic sur
+            // l'onglet Reels dédié survient PENDANT que ce même lecteur reste ouvert en continu
+            // (bug constaté en test terrain, retour utilisateur : un Reels resté figé sur "feed"
+            // sans jamais recouper). Motif racine : le classement initial n'est tranché qu'UNE
+            // fois par ouverture ([viewerOriginDecided]), et tant que l'utilisateur ne ferme pas
+            // le lecteur, rien ne le réévalue — un clic manqué à l'instant précis de l'ouverture
+            // (race event/scan) restait donc figé indéfiniment sur "feed", laissant l'onglet
+            // dédié défiler sans jamais être bloqué. Le signal de clic reste vérifié à chaque
+            // passe, y compris après la décision initiale, pour permettre cette correction.
+            val recentReelsTabTap = reelsTabTappedAtUptimeMs != 0L &&
+                    SystemClock.uptimeMillis() - reelsTabTappedAtUptimeMs <= REELS_TAB_TAP_VALIDITY_MS
+            if (recentReelsTabTap) {
+                Log.w(TAG, "Rattrapage : clic sur l'onglet Reels dédié détecté malgré un classement 'feed' déjà tranché")
+                currentViewerIsFromFeed = false
+                swipeTracker.reset()
+                reelsTabTappedAtUptimeMs = 0L
             }
         }
 
@@ -377,7 +665,17 @@ class ReelsAccessibilityService : AccessibilityService() {
      */
     private fun isInstagramForeground(): Boolean =
         try {
-            rootInActiveWindow?.packageName?.toString() == AppIds.INSTAGRAM
+            // `rootInActiveWindow` alloue un nouveau nœud à CHAQUE lecture : il doit être recyclé
+            // (audit pré-release). Cette fonction est appelée à chaque tour de la boucle de scan
+            // et avant chaque retour arrière — sans recyclage, elle fuyait un
+            // AccessibilityNodeInfo par appel, plusieurs fois par seconde en continu.
+            val active = rootInActiveWindow
+            try {
+                active?.packageName?.toString() == AppIds.INSTAGRAM
+            } finally {
+                @Suppress("DEPRECATION")
+                active?.recycle()
+            }
         } catch (_: Exception) {
             false
         }
@@ -386,13 +684,26 @@ class ReelsAccessibilityService : AccessibilityService() {
         try {
             val active = rootInActiveWindow
             if (active?.packageName?.toString() == AppIds.INSTAGRAM) return active
+            // Racine d'une AUTRE application : l'appelant ne la recevra jamais, donc personne
+            // d'autre ne la libérerait (audit pré-release — fuite à chaque appel dès qu'Instagram
+            // n'a pas le focus, c'est-à-dire en permanence hors usage d'Instagram).
+            @Suppress("DEPRECATION")
+            active?.recycle()
         } catch (_: Exception) {
             // Ignoré : on retente via la liste des fenêtres ci-dessous.
         }
         return try {
+            // Idem pour le balayage multi-fenêtre : seule la racine Instagram est retournée, les
+            // racines des autres fenêtres inspectées au passage doivent être recyclées ici.
             windows?.firstNotNullOfOrNull { window ->
                 val root = window.root
-                if (root?.packageName?.toString() == AppIds.INSTAGRAM) root else null
+                if (root?.packageName?.toString() == AppIds.INSTAGRAM) {
+                    root
+                } else {
+                    @Suppress("DEPRECATION")
+                    root?.recycle()
+                    null
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Impossible de localiser la fenêtre Instagram (multi-fenêtre) : ${e.message}")
@@ -443,7 +754,14 @@ class ReelsAccessibilityService : AccessibilityService() {
             // [isBlockedReelsScreen]) pour ignorer les faux positifs de transition du feed, mais
             // attendre cette confirmation avant de couper le son laissait passer ~200-400 ms
             // audibles à chaque ouverture d'un Reels (constat terrain).
-            val shouldStaySilenced = viewerOpen && !(currentViewerIsDm && swipeTracker.isWithinDmTolerance())
+            //
+            // Le feed Accueil bénéficie de la même exemption que DM pendant la tolérance de
+            // swipes : bug constaté (retour utilisateur) — le son restait coupé sur un Reel du
+            // feed qu'on a le droit de regarder, alors que currentViewerIsFromFeed n'était pas
+            // testé ici (seul currentViewerIsDm l'était). Sans ce test, tout Reel de feed dans sa
+            // fenêtre de tolérance était mute à tort.
+            val withinTolerance = (currentViewerIsDm || currentViewerIsFromFeed) && swipeTracker.isWithinDmTolerance()
+            val shouldStaySilenced = viewerOpen && !withinTolerance
             if (blockingEnabledCache && shouldStaySilenced) {
                 muteMediaAudio()
             } else if (!redirectChainActive) {
@@ -480,28 +798,45 @@ class ReelsAccessibilityService : AccessibilityService() {
         // défiler la conversation DM elle-même pour retrouver le message contenant le Reels —
         // avec une tolérance par défaut d'un seul swipe, ce simple geste épuisait le quota avant
         // même d'ouvrir le Reels, provoquant un blocage immédiat à l'ouverture.
+        // `root` DOIT être recyclé sur toutes les sorties (audit pré-release) : cette fonction est
+        // appelée à chaque TYPE_VIEW_SCROLLED, soit plusieurs fois par seconde pendant un
+        // défilement. Les deux sorties anticipées ci-dessous abandonnaient la racine sans la
+        // libérer, fuyant un AccessibilityNodeInfo par événement — d'où le try/finally.
         val root = findInstagramRoot() ?: return
-        if (!InstagramUiDetector.isImmersiveReelsViewerOpen(root)) return
+        try {
+            if (!InstagramUiDetector.isImmersiveReelsViewerOpen(root)) return
 
-        // Restreindre en plus à la source de l'événement : à l'ouverture d'un Reels DM, la mise
-        // en page de la barre de réponse / du composeur déclenche elle aussi des
-        // TYPE_VIEW_SCROLLED (settling initial, pas un geste de l'utilisateur), ce qui épuisait la
-        // tolérance dès l'ouverture (bug constaté en test terrain : blocage immédiat malgré aucun
-        // swipe réel). Seul le défilement du pager du lecteur (`clips_viewer_view_pager` /
-        // `clips_swipe_refresh_container`) correspond à un vrai swipe entre Reels.
-        val sourceId = try {
-            val source = event.source
-            val id = source?.viewIdResourceName
+            // Restreindre en plus à la source de l'événement : à l'ouverture d'un Reels DM, la mise
+            // en page de la barre de réponse / du composeur déclenche elle aussi des
+            // TYPE_VIEW_SCROLLED (settling initial, pas un geste de l'utilisateur), ce qui épuisait la
+            // tolérance dès l'ouverture (bug constaté en test terrain : blocage immédiat malgré aucun
+            // swipe réel). Seul le défilement du pager du lecteur (`clips_viewer_view_pager` /
+            // `clips_swipe_refresh_container`) correspond à un vrai swipe entre Reels.
+            val sourceId = try {
+                val source = event.source
+                val id = source?.viewIdResourceName
+                @Suppress("DEPRECATION")
+                source?.recycle()
+                id
+            } catch (_: Exception) {
+                null
+            }
+            if (sourceId == "${AppIds.INSTAGRAM}:id/clips_viewer_view_pager" ||
+                sourceId == "${AppIds.INSTAGRAM}:id/clips_swipe_refresh_container"
+            ) {
+                // Ignore le(s) scroll(s) de settling émis par l'animation d'ouverture du pager
+                // elle-même, juste après la toute première détection du lecteur (cf.
+                // [SCROLL_SETTLING_GRACE_MS] et [viewerOpenedAtUptimeMs]).
+                val sinceOpen = SystemClock.uptimeMillis() - viewerOpenedAtUptimeMs
+                if (viewerOpenedAtUptimeMs != 0L && sinceOpen in 0..SCROLL_SETTLING_GRACE_MS) {
+                    Log.d(TAG, "Scroll ignoré : settling d'ouverture (${sinceOpen}ms après ouverture)")
+                    return
+                }
+                swipeTracker.onSwipeDetected()
+            }
+        } finally {
             @Suppress("DEPRECATION")
-            source?.recycle()
-            id
-        } catch (_: Exception) {
-            null
-        }
-        if (sourceId == "${AppIds.INSTAGRAM}:id/clips_viewer_view_pager" ||
-            sourceId == "${AppIds.INSTAGRAM}:id/clips_swipe_refresh_container"
-        ) {
-            swipeTracker.onSwipeDetected()
+            root.recycle()
         }
     }
 
