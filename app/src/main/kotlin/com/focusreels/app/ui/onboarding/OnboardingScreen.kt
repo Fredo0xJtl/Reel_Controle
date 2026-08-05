@@ -29,7 +29,7 @@ fun OnboardingScreen(onBack: () -> Unit) {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }) { Text("Ouvrir les réglages d'accessibilité") }
 
-            Text("2. Désactiver l'optimisation de batterie pour Focus Reels (indispensable sur MIUI/HyperOS).")
+            Text("2. Désactiver l'optimisation de batterie pour Réel Contrôle (indispensable sur MIUI/HyperOS).")
             Button(onClick = {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = android.net.Uri.parse("package:" + context.packageName)

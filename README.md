@@ -1,4 +1,4 @@
-# Réels Contrôle
+# Réel Contrôle
 
 Application Android 100 % locale de blocage sélectif de l'onglet Reels d'Instagram.
 

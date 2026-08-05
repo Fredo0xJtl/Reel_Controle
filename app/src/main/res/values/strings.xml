@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Focus Reels</string>
+    <string name="app_name">RéelCtrl</string>
     <string name="accessibility_service_label">Blocage Reels Instagram</string>
     <string name="accessibility_service_description">Détecte l\'ouverture de l\'onglet Reels d\'Instagram pour appliquer le blocage local configuré. Aucune donnée n\'est transmise hors de l\'appareil.</string>
 </resources>

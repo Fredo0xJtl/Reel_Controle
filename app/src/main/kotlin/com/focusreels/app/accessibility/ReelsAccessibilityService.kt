@@ -153,6 +153,16 @@ class ReelsAccessibilityService : AccessibilityService() {
          * la tolérance et provoquait une fermeture prématurée.
          */
         private const val SCROLL_SETTLING_GRACE_MS = 700L
+
+        /**
+         * Passes consécutives où le lecteur doit être ABSENT avant de considérer une ouverture
+         * comme réellement terminée et de réinitialiser l'origine tranchée (cf.
+         * [isBlockedReelsScreen]). Miroir de [VIEWER_DEBOUNCE_COUNT] côté fermeture : un simple
+         * flicker d'une seule passe (fermeture/réouverture furtive du même lecteur pendant notre
+         * propre retour arrière) ne suffit pas à déclencher la réinitialisation, mais une fermeture
+         * qui tient sur deux passes consécutives (~60 ms) est traitée comme définitive.
+         */
+        private const val VIEWER_CLOSE_DEBOUNCE_COUNT = 2
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -172,6 +182,9 @@ class ReelsAccessibilityService : AccessibilityService() {
 
     /** Compteur anti-rebond du lecteur plein écran (cf. [VIEWER_DEBOUNCE_COUNT]). */
     private var consecutiveViewerDetections = 0
+
+    /** Compteur anti-rebond de la fermeture du lecteur plein écran (cf. [VIEWER_CLOSE_DEBOUNCE_COUNT]). */
+    private var consecutiveNoViewerDetections = 0
 
     /** True tant que le lecteur plein écran était ouvert lors de la dernière passe (cf. [isBlockedReelsScreen]). */
     private var wasViewerOpenLastScan = false
@@ -548,19 +561,38 @@ class ReelsAccessibilityService : AccessibilityService() {
             }
 
             // Ne PAS réinitialiser l'origine déjà tranchée (viewerOriginDecided / currentViewerIsDm
-            // / currentViewerIsFromFeed / swipeTracker) tant qu'une chaîne de redirection est en
-            // cours. Bug constaté en test terrain (logcat) : sur l'onglet Reels dédié, notre propre
-            // retour arrière ne quitte pas toujours le lecteur — Instagram peut l'interpréter comme
-            // une navigation dans son historique interne (Reel précédent), provoquant une
-            // fermeture/réouverture furtive du conteneur plein écran PENDANT les tentatives de
-            // vérification ([performRedirectAndVerify]). Cette fermeture éphémère faisait perdre le
-            // classement "onglet dédié" déjà établi ; la réouverture qui suivait était re-tranchée
-            // trop tôt (avant que la barre de nav ne redevienne lisible) et retombait à tort sur
-            // "feed", ce qui accordait une tolérance de swipe alors qu'aucune n'est due sur cet
-            // onglet. Une fermeture pendant une chaîne active n'est pas une fermeture confirmée :
-            // seule une fermeture survenant hors chaîne (l'utilisateur a vraiment quitté l'écran)
-            // doit déclencher une nouvelle décision.
-            if (!redirectChainActive) {
+            // / currentViewerIsFromFeed / swipeTracker) tant que la fermeture n'est pas CONFIRMÉE
+            // sur [VIEWER_CLOSE_DEBOUNCE_COUNT] passes consécutives. Bug constaté en test terrain
+            // (logcat) : sur l'onglet Reels dédié, notre propre retour arrière ne quitte pas
+            // toujours le lecteur — Instagram peut l'interpréter comme une navigation dans son
+            // historique interne (Reel précédent), provoquant une fermeture/réouverture furtive du
+            // conteneur plein écran PENDANT les tentatives de vérification
+            // ([performRedirectAndVerify]). Cette fermeture éphémère faisait perdre le classement
+            // "onglet dédié" déjà établi ; la réouverture qui suivait était re-tranchée trop tôt
+            // (avant que la barre de nav ne redevienne lisible) et retombait à tort sur "feed", ce
+            // qui accordait une tolérance de swipe alors qu'aucune n'est due sur cet onglet.
+            //
+            // ANCIEN CORRECTIF (abandonné) : gater ce reset sur `redirectChainActive` plutôt que
+            // sur un debounce. Bug constaté en test terrain (retour utilisateur, stress test —
+            // clics rapprochés sur l'onglet Reels puis sur un Reel du feed) : `redirectChainActive`
+            // reste `true` pendant TOUTE la durée de la vérification différée
+            // ([VERIFY_DELAY_MS], jusqu'à ~300 ms), bien plus longtemps qu'un vrai flicker d'une
+            // seule passe (~30 ms). Si le lecteur "onglet dédié" se fermait pour de bon (retour
+            // arrière réussi) et qu'un lecteur ENTIÈREMENT DIFFÉRENT s'ouvrait depuis le feed
+            // pendant cette fenêtre encore active, l'origine restait figée sur l'ancien classement
+            // ("onglet dédié", `currentViewerIsFromFeed = false`) : le nouveau lecteur, pourtant
+            // ouvert depuis le feed, sautait le bloc de décision (`viewerOriginDecided` déjà à
+            // `true`) et se retrouvait donc classé comme l'ancien lecteur — fermé instantanément
+            // sans tolérance de swipe, comme s'il venait de l'onglet dédié.
+            //
+            // Un debounce symétrique à celui de l'ouverture ([VIEWER_DEBOUNCE_COUNT]) résout les
+            // deux cas sans dépendre du minutage de la chaîne de redirection : un flicker d'une
+            // seule passe ne fait jamais gagner 2 détections "fermé" consécutives (la réouverture
+            // furtive survient bien avant), donc l'origine reste préservée ; une fermeture qui
+            // tient sur 2 passes (~60 ms) est en revanche traitée comme définitive et déclenche la
+            // réinitialisation, y compris pendant une chaîne de redirection encore active.
+            consecutiveNoViewerDetections++
+            if (consecutiveNoViewerDetections >= VIEWER_CLOSE_DEBOUNCE_COUNT) {
                 viewerOriginDecided = false
                 currentViewerIsDm = false
                 currentViewerIsFromFeed = false
@@ -594,6 +626,7 @@ class ReelsAccessibilityService : AccessibilityService() {
             }
             return false
         }
+        consecutiveNoViewerDetections = 0
         if (!wasViewerOpenLastScan) {
             // Toute première détection de cette ouverture : capture le point de départ de la
             // fenêtre de grâce anti-settling (cf. [viewerOpenedAtUptimeMs] et [handleScroll]).

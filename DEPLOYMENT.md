@@ -1,4 +1,4 @@
-# Déploiement et Test — Focus Reels V1.0-beta
+# Déploiement et Test — Réel Contrôle V1.0-beta
 
 ## Statut du projet
 
@@ -23,14 +23,14 @@
 
 - [ ] `adb devices` — vérifier la connexion
 - [ ] `adb install app-debug.apk` — installer l'app
-- [ ] Ouvrir **Focus Reels** sur l'appareil
+- [ ] Ouvrir **Réel Contrôle** sur l'appareil
 - [ ] Accepter l'alerte d'accessibilité → aller à la config
 
 ### Configuration
 
 - [ ] Activer service d'accessibilité (paramètres système)
 - [ ] Désactiver optimisation batterie :
-  - **Xiaomi** : Paramètres → Apps → Focus Reels → Optimisation batterie → OFF
+  - **Xiaomi** : Paramètres → Apps → Réel Contrôle → Optimisation batterie → OFF
   - **Samsung** : Paramètres → Batterie → Gestion d'alimentation → Ajouter à liste blanche
 - [ ] Redémarrer l'app
 
@@ -39,7 +39,7 @@
 1. Ouvrir **Instagram**
 2. Aller sur onglet **Reels**
 3. **Attendu** : redirection immédiate vers l'onglet **Accueil**
-4. Vérifier dans Focus Reels → **Historique** → une tentative enregistrée
+4. Vérifier dans Réel Contrôle → **Historique** → une tentative enregistrée
 
 ### Diagnostic (logs)
 

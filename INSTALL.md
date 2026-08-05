@@ -1,4 +1,4 @@
-# Installation de Focus Reels
+# Installation de Réel Contrôle
 
 APK debug générée : `app/build/outputs/apk/debug/app-debug.apk` (25 MB)
 
@@ -36,7 +36,7 @@ Success
 
 ### 3. Lancer l'app
 
-Depuis le téléphone : ouvrir `Focus Reels` depuis le menu des apps.
+Depuis le téléphone : ouvrir `Réel Contrôle` depuis le menu des apps.
 
 ## Configuration initiale
 
@@ -55,11 +55,11 @@ Depuis le téléphone : ouvrir `Focus Reels` depuis le menu des apps.
 ### 4. Désactiver l'optimisation batterie
 
 #### Xiaomi (MIUI/HyperOS)
-Aller à Paramètres → Apps → Focus Reels → Optimisation batterie → Désactiver.
+Aller à Paramètres → Apps → Réel Contrôle → Optimisation batterie → Désactiver.
 
 #### Samsung (OneUI / Galaxy S24)
-Aller à Paramètres → Apps → Focus Reels → Batterie → Mode de batterie adaptative → Désactiver  
-(ou : Paramètres → Batterie → Gestion d'alimentation → Ajouter Focus Reels à la liste blanche)
+Aller à Paramètres → Apps → Réel Contrôle → Batterie → Mode de batterie adaptative → Désactiver  
+(ou : Paramètres → Batterie → Gestion d'alimentation → Ajouter Réel Contrôle à la liste blanche)
 
 **Pourquoi ?** Les systèmes d'exploitation tuent agressivement les services background pour économiser la batterie. Sans cette étape, l'AccessibilityService peut se couper sans avertissement.
 
@@ -68,7 +68,7 @@ Aller à Paramètres → Apps → Focus Reels → Batterie → Mode de batterie 
 1. Ouvrir **Instagram**.
 2. Aller sur l'onglet **Reels** (icône vidéo).
 3. Instantanément, tu dois être redirigé vers l'onglet **Accueil**.
-4. Revenir à Focus Reels → tu verras une tentative bloquée dans l'**Historique**.
+4. Revenir à Réel Contrôle → tu verras une tentative bloquée dans l'**Historique**.
 
 ## Dépannage
 

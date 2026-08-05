@@ -1,6 +1,6 @@
 # Changelog
 
-Historique des évolutions significatives de Focus Reels, avec le contexte de diagnostic pour
+Historique des évolutions significatives de Réel Contrôle, avec le contexte de diagnostic pour
 chaque correction (utile en revue de code / portfolio : montre la démarche, pas seulement le
 résultat).
 
@@ -245,6 +245,22 @@ Synthèse ; diagnostic complet dans [docs/JOURNAL_TECHNIQUE.md](docs/JOURNAL_TEC
   sans tolérance de swipe.
 - Correction : `REELS_TAB_TAP_STALE_AT_HOME_MS` (400ms) purge le tap résiduel dès le retour
   sur un écran sans lecteur ouvert, indépendamment de `redirectChainActive`. Validé terrain.
+
+## v2.4.3 — Fix debounce de fermeture du lecteur (stress test) (2026-08-05)
+
+- Bug plus profond que le v2.4.2 : pendant une chaîne de redirection (`redirectChainActive`),
+  l'origine "onglet dédié" déjà tranchée n'était réinitialisée QUE si `redirectChainActive`
+  était retombé à `false`. Or cette variable reste vraie jusqu'à ~300ms (délai de
+  vérification), largement plus longtemps qu'un vrai flicker de fermeture (une seule passe,
+  ~30ms). En stress test (clics rapprochés onglet Reels → Reel du feed), un lecteur
+  entièrement différent (ouvert depuis le feed) pouvait s'ouvrir PENDANT cette fenêtre encore
+  active : l'ancien classement "onglet dédié" restait figé, le nouveau lecteur héritait du
+  verdict de l'ancien et se fermait instantanément, comme s'il venait de l'onglet dédié.
+- Correction : `VIEWER_CLOSE_DEBOUNCE_COUNT` (2 passes consécutives, symétrique à
+  `VIEWER_DEBOUNCE_COUNT` côté ouverture) remplace le gate sur `redirectChainActive`. Un
+  flicker d'une seule passe ne fait jamais gagner 2 détections "fermé" consécutives (origine
+  préservée) ; une fermeture réelle sur 2 passes (~60ms) réinitialise l'origine, y compris
+  pendant une chaîne de redirection active. Validé terrain.
 
 ## V1.0-beta — Version initiale
 

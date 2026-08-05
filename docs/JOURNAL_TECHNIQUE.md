@@ -1,4 +1,4 @@
-# Journal technique — Focus Reels
+# Journal technique — Réel Contrôle
 
 Journal de développement rédigé a posteriori (2026-08-05) à partir de l'historique complet des sessions de travail, pour usage portfolio. Documente les décisions d'architecture, les problèmes rencontrés en test terrain et les solutions retenues, dans l'ordre chronologique.
 
@@ -206,9 +206,19 @@ Un cluster de ~160 lignes dans `InstagramUiDetector` — `isGeneralReelsFeed`, `
 
 ---
 
+## 15. Debounce de fermeture du lecteur — 2026-08-05
+
+**Symptôme constaté en stress test après la v2.4.2** : clics rapprochés sur l'onglet Reels dédié puis sur un Reel du feed, répétés plusieurs fois de suite — le Reel du feed était encore fermé instantanément comme s'il venait de l'onglet dédié, malgré le correctif du §14.
+
+**Cause** : dans `isBlockedReelsScreen`, la réinitialisation de l'origine déjà tranchée (`viewerOriginDecided`, `currentViewerIsFromFeed`, etc.) n'avait lieu que si `redirectChainActive` était retombé à `false` — garde ajoutée pour tolérer un flicker de fermeture/réouverture furtive du même lecteur pendant notre propre retour arrière (cf. §10). Or `redirectChainActive` reste vrai pendant toute la vérification différée (`VERIFY_DELAY_MS`, jusqu'à ~300 ms), bien plus longtemps qu'un flicker réel (une seule passe, ~30 ms). Si le lecteur "onglet dédié" se fermait pour de bon et qu'un lecteur ENTIÈREMENT DIFFÉRENT s'ouvrait depuis le feed pendant cette fenêtre encore active, l'ancien classement restait figé et le nouveau lecteur en héritait à tort.
+
+**Solution** : remplacement du gate sur `redirectChainActive` par un debounce de fermeture symétrique à celui de l'ouverture — `VIEWER_CLOSE_DEBOUNCE_COUNT` (2 passes consécutives sans lecteur détecté) déclenche désormais la réinitialisation, indépendamment de l'état de la chaîne de redirection. Un flicker d'une seule passe ne fait jamais gagner 2 détections "fermé" consécutives (origine préservée comme avant) ; une fermeture réelle sur ~60 ms est traitée comme définitive. Validé sur le terrain (stress test).
+
+---
+
 ## Bilan des versions
 
-V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → **v2.4.2** (fix tap résiduel onglet Reels dédié, validé terrain).
+V1.0 → V1.0-beta → v1.3 → v1.5 → v1.6 → v1.7 → v1.8 → v1.8.1–v1.8.4 → v1.9 (refonte détection) → v2.0 → v2.0.1 → v2.1 → v2.2 → v2.3 (stable, dernière version validée terrain avant la phase design UI) → v2.3.3–v2.3.16 (correctifs feed/DM/onglet dédié, écran fractionné, latence, historique graphique) → v2.4.1 (audit pré-release, corrections de fuites mémoire, cadence adaptative, suppression du code mort) → v2.4.2 (fix tap résiduel onglet Reels dédié, validé terrain) → **v2.4.3** (fix debounce de fermeture du lecteur en stress test, validé terrain).
 
 ## Compétences illustrées par ce projet
 
